@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import click
+from rich_click import RichCommand, RichGroup
 import polars as pl
 from asv import results
 
@@ -9,7 +10,7 @@ from asv_spyglass._aux import getstrform
 from asv_spyglass.compare import ResultPreparer, do_compare
 
 
-@click.group()
+@click.group(cls=RichGroup)
 def cli():
     """
     Command-line interface for ASV benchmark analysis.
@@ -17,7 +18,7 @@ def cli():
     pass
 
 
-@cli.command()
+@cli.command(cls=RichCommand)
 @click.argument("b1", type=click.Path(exists=True), required=True)
 @click.argument("b2", type=click.Path(exists=True), required=True)
 @click.argument("bconf", type=click.Path(exists=True), required=True)
@@ -51,7 +52,7 @@ def compare(b1, b2, bconf, factor, split, only_changed, sort):  # Renamed to 'co
     print(do_compare(b1, b2, bconf, factor, split, only_changed, sort))
 
 
-@cli.command()
+@cli.command(cls=RichCommand)
 @click.argument("bres", type=click.Path(exists=True), required=True)
 @click.argument("bdat", type=click.Path(exists=True), required=True)
 @click.option(
