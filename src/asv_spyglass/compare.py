@@ -13,6 +13,89 @@ from asv_runner.statistics import get_err
 from asv_spyglass._asv_ro import ReadOnlyASVBenchmarks
 from asv_spyglass.results import PreparedResult, result_iter
 
+from dataclasses import dataclass
+import enum
+
+
+class ResultColor(enum.StrEnum):
+    BLACK = enum.auto()  # default
+    GREEN = enum.auto()
+    RED = enum.auto()
+    LIGHTGREY = enum.auto()
+
+
+class ResultMark(enum.StrEnum):
+    BETTER = "-"
+    WORSE = "+"
+    FAILURE = "!"
+    FIXED = "*"
+    INCOMPARABLE = "x"
+    UNCHANGED = " "
+    INSIGNIFICANT = "~"
+
+
+@dataclass
+class ASVChange:
+    mark: ResultMark
+    color: ResultColor
+    description: str
+    before: str
+    after: str
+
+
+@dataclass
+class Incomparable(ASVChange):
+    mark: ResultMark = ResultMark.INCOMPARABLE
+    color: ResultColor = ResultColor.LIGHTGREY
+    description: str = "Not comparable"
+    after: str = ""
+    before: str = ""
+
+
+@dataclass
+class Failure(ASVChange):
+    mark: ResultMark = ResultMark.FAILURE
+    color: ResultColor = ResultColor.RED
+    description: str = "Introduced a failure"
+    after: str = "Failed"
+    before: str = "Succeeded"
+
+
+@dataclass
+class Fixed(ASVChange):
+    mark: ResultMark = ResultMark.FIXED
+    color: ResultColor = ResultColor.GREEN
+    description: str = "Fixed a failure"
+    after: str = "Succeeded"
+    before: str = "Failed"
+
+
+@dataclass
+class NoChange(ASVChange):
+    mark: ResultMark = ResultMark.UNCHANGED
+    color: ResultColor = ResultColor.BLACK
+    description: str = "Both failed or either was skipped or no significant change"
+    after: str = ""
+    before: str = ""
+
+
+@dataclass
+class Better(ASVChange):
+    mark: ResultMark = ResultMark.BETTER
+    color: ResultColor = ResultColor.GREEN
+    description: str = "Relative improvement"
+    after: str = "Better"
+    before: str = "Worse"
+
+
+@dataclass
+class Worsened(ASVChange):
+    mark: ResultMark = ResultMark.WORSE
+    color: ResultColor = ResultColor.RED
+    description: str = "Relatively worse"
+    after: str = "Worse"
+    before: str = "Better"
+
 
 class ResultPreparer:
     """
