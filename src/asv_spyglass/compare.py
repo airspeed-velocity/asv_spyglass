@@ -259,14 +259,14 @@ def _format_comparison_tables(
 
         if not filtered_df.is_empty():
             table_data = []
-            for row in filtered_df.rows():
+            for row in filtered_df.iter_rows(named=True):
                 table_data.append(
                     [
-                        str(row[1]),  # mark (convert to string)
-                        human_value(row[2], row[8], err=row[6]),  # before
-                        human_value(row[3], row[8], err=row[7]),  # after
-                        str(Ratio(row[2], row[3])),  # ratio
-                        row[0],  # benchmark
+                        str(row["mark"]),
+                        human_value(row["before"], row["unit"], err=row["err_before"]),
+                        human_value(row["after"], row["unit"], err=row["err_after"]),
+                        str(Ratio(row["before"], row["after"])),
+                        row["benchmark"],
                     ]
                 )
             if color == "all":

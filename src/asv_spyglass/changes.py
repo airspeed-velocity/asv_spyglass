@@ -3,10 +3,10 @@ from dataclasses import dataclass
 
 
 class ResultColor(enum.StrEnum):
-    DEFAULT = "black"
+    DEFAULT = "white"
     GREEN = enum.auto()
     RED = enum.auto()
-    LIGHTGREY = enum.auto()
+    LIGHTGREY = "light_grey"
 
 
 class ResultMark(enum.StrEnum):

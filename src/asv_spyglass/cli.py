@@ -9,6 +9,7 @@ from rich.table import Table
 from rich_click import RichCommand, RichGroup
 
 from asv_spyglass._asv_ro import ReadOnlyASVBenchmarks
+from asv_spyglass.changes import ResultMark
 from asv_spyglass.compare import ResultPreparer, do_compare
 
 
@@ -51,11 +52,11 @@ def compare(b1, b2, bconf, factor, split, only_changed, sort):
     """
     Compare two ASV result files.
     """
-    tables = do_compare(b1, b2, bconf, factor, split, only_changed, sort)
+    all_tables = do_compare(b1, b2, bconf, factor, split, only_changed, sort)
 
     console = Console()
 
-    for key, table_data in tables.items():
+    for key, table_data in all_tables.items():
         if not only_changed:
             console.print("")
             console.print(table_data["title"], style="bold")
@@ -67,6 +68,7 @@ def compare(b1, b2, bconf, factor, split, only_changed, sort):
             header_style="bold magenta",
             box=box.SIMPLE,
         )
+
         for header in table_data["headers"]:
             table.add_column(
                 header, justify="right" if header != "Benchmark (Parameter)" else "left"
@@ -76,14 +78,21 @@ def compare(b1, b2, bconf, factor, split, only_changed, sort):
             change_mark = row[0]
             row_style = ""
 
-            if change_mark == "-":
+            # Determine row style based on change_mark
+            if change_mark == ResultMark.BETTER:
                 row_style = "green"
-            elif change_mark == "+":
+            elif change_mark == ResultMark.WORSE:
                 row_style = "red"
-            elif change_mark == " ":
+            elif change_mark == ResultMark.FAILURE:
                 row_style = "red"
-            elif change_mark == " ":
-                row_style = "bright_black"
+            elif change_mark == ResultMark.FIXED:
+                row_style = "green"
+            elif change_mark == ResultMark.INCOMPARABLE:
+                row_style = "light_grey"
+            elif change_mark == ResultMark.UNCHANGED:
+                row_style = "white"
+            elif change_mark == ResultMark.INSIGNIFICANT:
+                row_style = "white"
 
             table.add_row(*row, style=row_style)
 
