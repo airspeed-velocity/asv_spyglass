@@ -48,3 +48,10 @@ def test_ratio_t2_none():
     ratio = Ratio(t1=10, t2=None)
     assert ratio.val == math.inf
     assert str(ratio) == "n/a"
+
+
+def test_ratio_is_insignificant():
+    ratio = Ratio(t1=10, t2=500)
+    ratio.is_insignificant = True
+    assert ratio.val == 50
+    assert str(ratio) == '~50.00'
