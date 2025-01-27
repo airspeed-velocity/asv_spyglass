@@ -9,6 +9,10 @@ from asv_spyglass._asv_ro import ReadOnlyASVBenchmarks
 from asv_spyglass._aux import getstrform
 from asv_spyglass.compare import ResultPreparer, do_compare
 
+from rich.console import Console
+from rich.table import Table
+from rich import box
+
 
 @click.group(cls=RichGroup)
 def cli():
@@ -49,7 +53,47 @@ def compare(b1, b2, bconf, factor, split, only_changed, sort):  # Renamed to 'co
     """
     Compare two ASV result files.
     """
-    print(do_compare(b1, b2, bconf, factor, split, only_changed, sort))
+    tables = do_compare(b1, b2, bconf, factor, split, only_changed, sort)
+
+    console = Console()
+
+    for key, table_data in tables.items():
+        if not only_changed:
+            console.print("")
+            console.print(table_data["title"], style="bold")
+            console.print("")
+
+        table = Table(
+            title=table_data["title"],
+            show_header=True,
+            header_style="bold magenta",
+            box=box.SIMPLE,
+        )
+        for header in table_data["headers"]:
+            table.add_column(header, justify="right" if header != "Benchmark (Parameter)" else "left")
+
+        for row in table_data["table_data"]:
+            change_mark = row[0]
+            row_style = ""
+
+            if change_mark == '-':
+                row_style = "green"
+            elif change_mark == '+':
+                row_style = "red"
+            elif change_mark == ' ':
+                row_style = "red"
+            elif change_mark == ' ':
+                row_style = "bright_black"
+
+            table.add_row(*row, style=row_style)
+
+        console.print(table)
+
+        # Print summary of worsened/improved status
+        if table_data["worsened"]:
+            console.print("[bold red]Regression![/]")
+        if table_data["improved"]:
+            console.print("[bold green]Improvement![/]")
 
 
 @cli.command(cls=RichCommand)
