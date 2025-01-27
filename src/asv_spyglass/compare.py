@@ -190,7 +190,7 @@ def do_compare(
         asv1 = ASVBench(benchmark, pr1)
         asv2 = ASVBench(benchmark, pr2)
 
-        ratio = Ratio(asv1.time, asv1.time)
+        ratio = Ratio(asv1.time, asv2.time)
         color, mark = _determine_result_color_and_mark(
             asv1,
             asv2,

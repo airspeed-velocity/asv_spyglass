@@ -21,10 +21,12 @@ def test_result_iter(shared_datadir):
 
 def test_do_compare(shared_datadir):
     verify(
-        do_compare(
-            getstrform(shared_datadir / "a0f29428-conda-py3.11-numpy.json"),
-            getstrform(shared_datadir / "a0f29428-virtualenv-py3.12-numpy.json"),
-            shared_datadir / "asv_samples_a0f29428_benchmarks.json",
+        pp.pformat(
+            do_compare(
+                getstrform(shared_datadir / "a0f29428-conda-py3.11-numpy.json"),
+                getstrform(shared_datadir / "a0f29428-virtualenv-py3.12-numpy.json"),
+                shared_datadir / "asv_samples_a0f29428_benchmarks.json",
+            )
         )
     )
 
