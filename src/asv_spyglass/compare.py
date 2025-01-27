@@ -1,10 +1,9 @@
 from pathlib import Path
 
+import polars as pl
 from asv import results
 from asv.commands.compare import _is_result_better, _isna, unroll_result
 from asv.util import human_value
-from asv_runner.console import color_print
-import polars as pl
 
 from asv_spyglass._asv_ro import ReadOnlyASVBenchmarks
 from asv_spyglass._num import Ratio
@@ -15,8 +14,8 @@ from asv_spyglass.changes import (
     Fixed,
     Incomparable,
     NoChange,
-    Worse,
     ResultMark,
+    Worse,
 )
 from asv_spyglass.results import ASVBench, PreparedResult, result_iter
 
@@ -139,37 +138,31 @@ def _get_change_info(
         return NoChange()
 
 
-def do_compare(
-    b1,
-    b2,
-    bdat,
-    factor=1.1,
-    split=False,
-    only_changed=False,
-    sort="default",
-    machine=None,
-    env_spec=None,
-    use_stats=True,
+def _create_comparison_dataframe(
+    pr1: PreparedResult,
+    pr2: PreparedResult,
+    factor: float,
+    only_changed: bool,
+    use_stats: bool,
 ):
-    # Load results
-    res_1 = results.Results.load(b1)
-    res_2 = results.Results.load(b2)
+    """
+    Creates a Polars DataFrame comparing results from two PreparedResult objects.
 
-    # Initialize benchmarks
-    benchmarks = ReadOnlyASVBenchmarks(Path(bdat)).benchmarks
+    Args:
+        pr1 (PreparedResult): The first PreparedResult object.
+        pr2 (PreparedResult): The second PreparedResult object.
+        factor (float): The factor used for determining significance.
+        only_changed (bool): Whether to only include changed benchmarks.
+        use_stats (bool): Whether to use statistical significance.
 
-    # Prepare results
-    preparer = ResultPreparer(benchmarks)
-    pr1 = preparer.prepare(res_1)
-    pr2 = preparer.prepare(res_2)
-
-    # Extract data
-    mname_1 = f"{pr1.machine_name}/{pr1.env_name}"
-    mname_2 = f"{pr2.machine_name}/{pr2.env_name}"
-    machine_env_names = {mname_1, mname_2}
-
-    # Create a list to collect data for the DataFrame
+    Returns:
+        pl.DataFrame: A DataFrame with comparison data.
+    """
     data = []
+    machine_env_names = {
+        f"{pr1.machine_name}/{pr1.env_name}",
+        f"{pr2.machine_name}/{pr2.env_name}",
+    }
 
     for benchmark in sorted(set(pr1.results.keys()) | set(pr2.results.keys())):
         asv1 = ASVBench(benchmark, pr1)
@@ -199,7 +192,10 @@ def do_compare(
 
         # Determine benchmark name format
         if len(machine_env_names) > 1:
-            benchmark_name = f"{benchmark} [{mname_1} -> {mname_2}]"
+            benchmark_name = (
+                f"{benchmark} [{pr1.machine_name}/{pr1.env_name}"
+                f" -> {pr2.machine_name}/{pr2.env_name}]"
+            )
         else:
             benchmark_name = benchmark
 
@@ -215,26 +211,36 @@ def do_compare(
                 "is_insignificant": ratio.is_insignificant,
                 "err_before": asv1.err,
                 "err_after": asv2.err,
-                "unit": asv1.unit or asv2.unit,
+                "unit": asv1.unit or asv2.unit,  # Use unit from asv1 or asv2
                 "color": diffinfo.color.name.lower(),
                 "state": diffinfo.state,
             }
         )
 
-    # Create a Polars DataFrame
-    df = pl.DataFrame(data)
+    return pl.DataFrame(data)
+
+
+def _format_comparison_tables(
+    df: pl.DataFrame, sort: str, name_1: str, name_2: str, split: bool
+):
+    """
+    Formats a comparison DataFrame into tables for display.
+
+    Args:
+        df (pl.DataFrame): The comparison DataFrame.
+        sort (str): The sorting method ("ratio" or "name").
+        name_1 (str): The name of the first commit/result.
+        name_2 (str): The name of the second commit/result.
+
+    Returns:
+        dict: A dictionary of formatted tables.
+    """
 
     # Sort the DataFrame
     if sort == "ratio":
         df = df.sort("ratio", descending=True)
     elif sort == "name":
         df = df.sort("benchmark")
-
-    # Get commit names or use empty strings
-    name_1 = ""  # commit_names.get(hash_1, "")
-    name_2 = ""  # commit_names.get(hash_2, "")
-    name_1 = f"<{name_1}>" if name_1 else ""
-    name_2 = f"<{name_2}>" if name_2 else ""
 
     # Construct the table data for each category
     all_tables = {}
@@ -285,5 +291,44 @@ def do_compare(
                 "table_data": table_data,
                 "states": filtered_df.select(pl.col("state")).to_series().to_list(),
             }
+
+    return all_tables
+
+
+def do_compare(
+    b1,
+    b2,
+    bdat,
+    factor=1.1,
+    split=False,
+    only_changed=False,
+    sort="default",
+    machine=None,
+    env_spec=None,
+    use_stats=True,
+):
+    # Load results
+    res_1 = results.Results.load(b1)
+    res_2 = results.Results.load(b2)
+
+    # Initialize benchmarks
+    benchmarks = ReadOnlyASVBenchmarks(Path(bdat)).benchmarks
+
+    # Prepare results
+    preparer = ResultPreparer(benchmarks)
+    pr1 = preparer.prepare(res_1)
+    pr2 = preparer.prepare(res_2)
+
+    # Create the comparison DataFrame
+    df = _create_comparison_dataframe(pr1, pr2, factor, only_changed, use_stats)
+
+    # Get commit names or use empty strings
+    name_1 = ""  # commit_names.get(hash_1, "")
+    name_2 = ""  # commit_names.get(hash_2, "")
+    name_1 = f"<{name_1}>" if name_1 else ""
+    name_2 = f"<{name_2}>" if name_2 else ""
+
+    # Format the DataFrame into tables
+    all_tables = _format_comparison_tables(df, sort, name_1, name_2, split)
 
     return all_tables
