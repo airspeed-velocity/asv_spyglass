@@ -3,7 +3,7 @@
                      'After ',
                      'Ratio',
                      'Benchmark (Parameter)'],
-         'improved': False,
+         'improved': True,
          'table_data': [['-',
                          '94.8±30μs',
                          '28.4±0.2μs',
