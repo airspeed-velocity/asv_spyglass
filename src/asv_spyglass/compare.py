@@ -7,6 +7,15 @@ from asv_runner.console import color_print
 
 from asv_spyglass._asv_ro import ReadOnlyASVBenchmarks
 from asv_spyglass._num import Ratio
+from asv_spyglass.changes import (
+    ASVChangeInfo,
+    Better,
+    Failure,
+    Fixed,
+    Incomparable,
+    NoChange,
+    Worse,
+)
 from asv_spyglass.results import ASVBench, PreparedResult, result_iter
 
 
@@ -84,35 +93,28 @@ class ResultPreparer:
         )
 
 
-def _determine_result_color_and_mark(asv1: ASVBench, asv2: ASVBench, factor, use_stats):
-    worsened = False
-    improved = False
+def _get_change_info(
+    asv1: ASVBench, asv2: ASVBench, factor, use_stats
+) -> ASVChangeInfo:
     if (
         asv1.version is not None
         and asv2.version is not None
         and asv1.version != asv2.version
     ):
         # not comparable
-        color = "lightgrey"
-        mark = "x"
+        return Incomparable()
     elif asv1.time is not None and asv2.time is None:
         # introduced a failure
-        color = "red"
-        mark = "!"
-        worsened = True
+        return Failure()
     elif asv1.time is None and asv2.time is not None:
         # fixed a failure
-        color = "green"
-        mark = " "
-        improved = True
+        return Fixed()
     elif asv1.time is None and asv2.time is None:
         # both failed
-        color = "default"
-        mark = " "
+        return NoChange()
     elif _isna(asv1.time) or _isna(asv2.time):
         # either one was skipped
-        color = "default"
-        mark = " "
+        return NoChange()
     elif _is_result_better(
         asv2.time,
         asv1.time,
@@ -121,9 +123,7 @@ def _determine_result_color_and_mark(asv1: ASVBench, asv2: ASVBench, factor, use
         factor,
         use_stats=use_stats,
     ):
-        color = "green"
-        mark = "-"
-        improved = True
+        return Better()
     elif _is_result_better(
         asv1.time,
         asv2.time,
@@ -132,13 +132,9 @@ def _determine_result_color_and_mark(asv1: ASVBench, asv2: ASVBench, factor, use
         factor,
         use_stats=use_stats,
     ):
-        color = "red"
-        mark = "+"
-        worsened = True
+        return Worse()
     else:
-        color = "default"
-        mark = " "
-    return (color, mark, worsened, improved)
+        return NoChange()
 
 
 def do_compare(
@@ -185,29 +181,36 @@ def do_compare(
     else:
         bench["all"] = []
 
+    states = []
     for benchmark in joint_benchmarks:
         asv1 = ASVBench(benchmark, pr1)
         asv2 = ASVBench(benchmark, pr2)
 
         ratio = Ratio(asv1.time, asv2.time)
-        color, mark, worsened, improved = _determine_result_color_and_mark(
+        diffinfo = _get_change_info(
             asv1,
             asv2,
             factor,
             use_stats,
         )
+        states.append(diffinfo.state)
 
-        if mark == " ":
+        if isinstance(diffinfo, NoChange):
             # Mark statistically insignificant results
             if _is_result_better(
                 asv1.time, asv2.time, None, None, factor
             ) or _is_result_better(asv2.time, asv1.time, None, None, factor):
                 ratio.is_insignificant = True
 
-        if only_changed and mark in (" ", "x", "*"):
+        if only_changed and diffinfo.mark.value in (" ", "x", "*"):
             continue
 
-        details = f"{mark:1s} {human_value(asv1.time, asv1.unit, err=asv1.err):>15s}  {human_value(asv2.time, asv2.unit, err=asv2.err):>15s} {str(ratio):>8s}  "
+        details = (
+            f"{diffinfo.mark:1s} "
+            f"{human_value(asv1.time, asv1.unit, err=asv1.err):>15s} "
+            f"{human_value(asv2.time, asv2.unit, err=asv2.err):>15s} "
+            f"{str(ratio):>8s} "
+        )
         split_line = details.split()
         if len(machine_env_names) > 1:
             benchmark_name = f"{benchmark} [{mname_1} -> {mname_2}]"
@@ -218,7 +221,7 @@ def do_compare(
         else:
             split_line = [" "] + split_line + [benchmark_name]
         if split:
-            bench[color].append(split_line)
+            bench[diffinfo.color].append(split_line)
         else:
             bench["all"].append(split_line)
 
@@ -266,7 +269,7 @@ def do_compare(
         else:
             raise ValueError("Unknown 'sort'")
 
-        print(worsened, improved)
+        print(states)
         table_data = [
             [
                 row[0],  # Change mark
@@ -288,8 +291,7 @@ def do_compare(
                 "Benchmark (Parameter)",
             ],
             "table_data": table_data,
-            "worsened": worsened,  # Pass worsened and improved flags
-            "improved": improved,
+            "states": states,
         }
 
     return all_tables

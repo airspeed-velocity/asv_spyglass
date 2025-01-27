@@ -1,8 +1,6 @@
 import enum
 from dataclasses import dataclass
 
-from asv_spyglass._num import BenchNum
-
 
 class ResultColor(enum.StrEnum):
     DEFAULT = "black"
@@ -21,75 +19,77 @@ class ResultMark(enum.StrEnum):
     INSIGNIFICANT = "~"
 
 
+class AfterIs(enum.Enum):
+    LUKEWARM = 0
+    WORSE = -1
+    BETTER = 1
+
+
 @dataclass
-class ASVChange:
+class ASVChangeInfo:
     mark: ResultMark
     color: ResultColor
     description: str
-    before: BenchNum
-    after: BenchNum
-    machine: str
-    envname: str
+    state: AfterIs
+    before: str
+    after: str
 
 
 @dataclass
-class Incomparable(ASVChange):
+class Incomparable(ASVChangeInfo):
     mark: ResultMark = ResultMark.INCOMPARABLE
     color: ResultColor = ResultColor.LIGHTGREY
     description: str = "Not comparable"
-    after: str = ""
+    state: AfterIs = AfterIs.LUKEWARM
     before: str = ""
+    after: str = ""
 
 
 @dataclass
-class Failure(ASVChange):
+class Failure(ASVChangeInfo):
     mark: ResultMark = ResultMark.FAILURE
     color: ResultColor = ResultColor.RED
     description: str = "Introduced a failure"
-    after: str = "Failed"
+    state: AfterIs = AfterIs.WORSE
     before: str = "Succeeded"
+    after: str = "Failed"
 
 
 @dataclass
-class Fixed(ASVChange):
+class Fixed(ASVChangeInfo):
     mark: ResultMark = ResultMark.FIXED
     color: ResultColor = ResultColor.GREEN
     description: str = "Fixed a failure"
-    after: str = "Succeeded"
+    state: AfterIs = AfterIs.BETTER
     before: str = "Failed"
+    after: str = "Succeeded"
 
 
 @dataclass
-class NoChange(ASVChange):
+class NoChange(ASVChangeInfo):
     mark: ResultMark = ResultMark.UNCHANGED
     color: ResultColor = ResultColor.DEFAULT
     description: str = "Both failed or either was skipped or no significant change"
-    after: str = ""
+    state: AfterIs = AfterIs.LUKEWARM
     before: str = ""
+    after: str = ""
 
 
 @dataclass
-class Insignificant(NoChange):
-    mark: ResultMark = ResultMark.INSIGNIFICANT
-    color: ResultColor = ResultColor.DEFAULT
-    description: str = "Statistically insignificant change"
-    after: str = ""
-    before: str = ""
-
-
-@dataclass
-class Better(ASVChange):
+class Better(ASVChangeInfo):
     mark: ResultMark = ResultMark.BETTER
     color: ResultColor = ResultColor.GREEN
     description: str = "Relative improvement"
-    after: str = "Better"
+    state: AfterIs = AfterIs.BETTER
     before: str = "Worse"
+    after: str = "Better"
 
 
 @dataclass
-class Worsened(ASVChange):
+class Worse(ASVChangeInfo):
     mark: ResultMark = ResultMark.WORSE
     color: ResultColor = ResultColor.RED
     description: str = "Relatively worse"
-    after: str = "Worse"
+    state: AfterIs = AfterIs.WORSE
     before: str = "Better"
+    after: str = "Worse"

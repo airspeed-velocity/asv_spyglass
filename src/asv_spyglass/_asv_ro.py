@@ -18,8 +18,8 @@ class ReadOnlyASVBenchmarks:
 
         Args:
             benchmarks_file (Path): Path to the benchmarks JSON file.
-            regex (Union[str, list[str]], optional): Regular expression(s) to filter benchmarks.
-                Defaults to None (all benchmarks included).
+            regex (Union[str, list[str]], optional): Regular expression(s) to
+                filter benchmarks.  Defaults to None (all benchmarks included).
         """
         d = asv_json_load(getstrform(benchmarks_file), api_version=self.api_version)
         self._base_benchmarks = {}  # Store all benchmarks here

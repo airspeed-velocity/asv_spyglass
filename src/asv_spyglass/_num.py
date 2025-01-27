@@ -19,7 +19,8 @@ class Ratio:
         _t1 (float | None): The first value (denominator).
         _t2 (float | None): The second value (numerator).
         val (float): The calculated ratio, which can be:
-            - The actual ratio if both _t1 and _t2 are valid numbers and _t1 is not zero.
+            - The actual ratio if both _t1 and _t2 are valid numbers and _t1 is
+              not zero.
             - math.inf if either _t1 or _t2 is None or NaN, or if _t1 is zero.
         is_insignificant (bool): A flag indicating whether the ratio should be
             considered statistically insignificant. Defaults to False.
@@ -35,7 +36,8 @@ class Ratio:
             - A formatted string with 2 decimal places otherwise.
 
         _is_invalid(self, t1, t2):
-            A private helper method to check if the inputs are invalid for ratio calculation.
+            A private helper method to check if the inputs are invalid for ratio
+            calculation.
     """
 
     def __init__(self, t1: float | None, t2: float | None):

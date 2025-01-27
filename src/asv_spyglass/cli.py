@@ -68,19 +68,21 @@ def compare(b1, b2, bconf, factor, split, only_changed, sort):  # Renamed to 'co
             box=box.SIMPLE,
         )
         for header in table_data["headers"]:
-            table.add_column(header, justify="right" if header != "Benchmark (Parameter)" else "left")
+            table.add_column(
+                header, justify="right" if header != "Benchmark (Parameter)" else "left"
+            )
 
         for row in table_data["table_data"]:
             change_mark = row[0]
             row_style = ""
 
-            if change_mark == '-':
+            if change_mark == "-":
                 row_style = "green"
-            elif change_mark == '+':
+            elif change_mark == "+":
                 row_style = "red"
-            elif change_mark == ' ':
+            elif change_mark == " ":
                 row_style = "red"
-            elif change_mark == ' ':
+            elif change_mark == " ":
                 row_style = "bright_black"
 
             table.add_row(*row, style=row_style)
@@ -88,10 +90,10 @@ def compare(b1, b2, bconf, factor, split, only_changed, sort):  # Renamed to 'co
         console.print(table)
 
         # Print summary of worsened/improved status
-        if table_data["worsened"]:
-            console.print("[bold red]Regression![/]")
-        if table_data["improved"]:
+        if av_x := sum([x.value for x in table_data["states"]]) > 0:
             console.print("[bold green]Improvement![/]")
+        elif av_x < 0:
+            console.print("[bold red]Regression![/]")
 
 
 @cli.command(cls=RichCommand)
