@@ -1,13 +1,10 @@
 import dataclasses
-import re
 import math
+import re
 from collections import namedtuple
 
 import polars as pl
-from asv import results
 from asv_runner.statistics import get_err
-
-from asv_spyglass._asv_ro import ReadOnlyASVBenchmarks
 
 ASVResult = namedtuple(
     "ASVResult",

@@ -1,18 +1,13 @@
-import math
 from pathlib import Path
 
-import polars as pl
-import tabulate
 from asv import results
 from asv.commands.compare import _is_result_better, _isna, unroll_result
-from asv.console import log
 from asv.util import human_value
 from asv_runner.console import color_print
-from asv_runner.statistics import get_err
 
 from asv_spyglass._asv_ro import ReadOnlyASVBenchmarks
-from asv_spyglass.results import PreparedResult, ASVBench, result_iter
 from asv_spyglass._num import Ratio
+from asv_spyglass.results import ASVBench, PreparedResult, result_iter
 
 
 class ResultPreparer:
@@ -213,12 +208,7 @@ def do_compare(
         if only_changed and mark in (" ", "x", "*"):
             continue
 
-        details = "{0:1s} {1:>15s}  {2:>15s} {3:>8s}  ".format(
-            mark,
-            human_value(asv1.time, asv1.unit, err=asv1.err),
-            human_value(asv2.time, asv2.unit, err=asv2.err),
-            str(ratio),
-        )
+        details = f"{mark:1s} {human_value(asv1.time, asv1.unit, err=asv1.err):>15s}  {human_value(asv2.time, asv2.unit, err=asv2.err):>15s} {str(ratio):>8s}  "
         split_line = details.split()
         if len(machine_env_names) > 1:
             benchmark_name = f"{benchmark} [{mname_1} -> {mname_2}]"

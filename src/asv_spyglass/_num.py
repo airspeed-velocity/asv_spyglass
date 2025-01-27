@@ -1,6 +1,5 @@
-from dataclasses import dataclass, field
-from asv.util import human_value
 import math
+from dataclasses import dataclass
 
 
 @dataclass

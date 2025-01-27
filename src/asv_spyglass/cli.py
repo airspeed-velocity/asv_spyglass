@@ -1,17 +1,15 @@
 from pathlib import Path
 
 import click
-from rich_click import RichCommand, RichGroup
 import polars as pl
 from asv import results
-
-from asv_spyglass._asv_ro import ReadOnlyASVBenchmarks
-from asv_spyglass._aux import getstrform
-from asv_spyglass.compare import ResultPreparer, do_compare
-
+from rich import box
 from rich.console import Console
 from rich.table import Table
-from rich import box
+from rich_click import RichCommand, RichGroup
+
+from asv_spyglass._asv_ro import ReadOnlyASVBenchmarks
+from asv_spyglass.compare import ResultPreparer, do_compare
 
 
 @click.group(cls=RichGroup)

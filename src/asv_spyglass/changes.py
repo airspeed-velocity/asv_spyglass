@@ -1,7 +1,8 @@
-from dataclasses import dataclass
 import enum
+from dataclasses import dataclass
 
 from asv_spyglass._num import BenchNum
+
 
 class ResultColor(enum.StrEnum):
     DEFAULT = "black"
@@ -92,5 +93,3 @@ class Worsened(ASVChange):
     description: str = "Relatively worse"
     after: str = "Worse"
     before: str = "Better"
-
-

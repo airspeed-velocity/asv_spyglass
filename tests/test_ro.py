@@ -1,5 +1,4 @@
 import pprint as pp
-from pathlib import Path
 
 from approvaltests.approvals import verify
 

@@ -1,5 +1,6 @@
-from asv_spyglass._num import Ratio
 import math
+
+from asv_spyglass._num import Ratio
 
 
 def test_ratio_normal_calculation():
