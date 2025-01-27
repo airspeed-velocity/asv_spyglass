@@ -85,6 +85,8 @@ class ResultPreparer:
 
 
 def _determine_result_color_and_mark(asv1: ASVBench, asv2: ASVBench, factor, use_stats):
+    worsened = False
+    improved = False
     if (
         asv1.version is not None
         and asv2.version is not None
@@ -114,8 +116,8 @@ def _determine_result_color_and_mark(asv1: ASVBench, asv2: ASVBench, factor, use
     elif _is_result_better(
         asv2.time,
         asv1.time,
-        asv2.stats,
-        asv1.stats,
+        asv2.stats_n_samples,
+        asv1.stats_n_samples,
         factor,
         use_stats=use_stats,
     ):
@@ -125,8 +127,8 @@ def _determine_result_color_and_mark(asv1: ASVBench, asv2: ASVBench, factor, use
     elif _is_result_better(
         asv1.time,
         asv2.time,
-        asv1.stats,
-        asv2.stats,
+        asv1.stats_n_samples,
+        asv2.stats_n_samples,
         factor,
         use_stats=use_stats,
     ):
@@ -136,7 +138,7 @@ def _determine_result_color_and_mark(asv1: ASVBench, asv2: ASVBench, factor, use
     else:
         color = "default"
         mark = " "
-    return (color, mark)
+    return (color, mark, worsened, improved)
 
 
 def do_compare(
@@ -183,15 +185,12 @@ def do_compare(
     else:
         bench["all"] = []
 
-    worsened = False
-    improved = False
-
     for benchmark in joint_benchmarks:
         asv1 = ASVBench(benchmark, pr1)
         asv2 = ASVBench(benchmark, pr2)
 
         ratio = Ratio(asv1.time, asv2.time)
-        color, mark = _determine_result_color_and_mark(
+        color, mark, worsened, improved = _determine_result_color_and_mark(
             asv1,
             asv2,
             factor,
