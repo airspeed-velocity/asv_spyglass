@@ -1,9 +1,11 @@
 import dataclasses
 import re
+import math
 from collections import namedtuple
 
 import polars as pl
 from asv import results
+from asv_runner.statistics import get_err
 
 from asv_spyglass._asv_ro import ReadOnlyASVBenchmarks
 
@@ -111,3 +113,18 @@ class PreparedResult:
             data.append(row)
 
         return pl.DataFrame(data)
+
+
+class ASVBench:
+    def __init__(self, benchname: str, pr: PreparedResult):
+        self.name = benchname
+        self._pr = pr
+        self.time = pr.results.get(self.name, math.nan)
+        self.stats = pr.stats.get(self.name, (None,))
+        self.err = (
+            get_err(self.time, self.stats[0])
+            if self.name in pr.stats.get(self.name)
+            else None
+        )
+        self.version = pr.versions.get(self.name)
+        self.unit = pr.units.get(self.name)

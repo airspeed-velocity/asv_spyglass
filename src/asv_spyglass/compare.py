@@ -11,90 +11,8 @@ from asv_runner.console import color_print
 from asv_runner.statistics import get_err
 
 from asv_spyglass._asv_ro import ReadOnlyASVBenchmarks
-from asv_spyglass.results import PreparedResult, result_iter
-
-from dataclasses import dataclass
-import enum
-
-
-class ResultColor(enum.StrEnum):
-    BLACK = enum.auto()  # default
-    GREEN = enum.auto()
-    RED = enum.auto()
-    LIGHTGREY = enum.auto()
-
-
-class ResultMark(enum.StrEnum):
-    BETTER = "-"
-    WORSE = "+"
-    FAILURE = "!"
-    FIXED = "*"
-    INCOMPARABLE = "x"
-    UNCHANGED = " "
-    INSIGNIFICANT = "~"
-
-
-@dataclass
-class ASVChange:
-    mark: ResultMark
-    color: ResultColor
-    description: str
-    before: str
-    after: str
-
-
-@dataclass
-class Incomparable(ASVChange):
-    mark: ResultMark = ResultMark.INCOMPARABLE
-    color: ResultColor = ResultColor.LIGHTGREY
-    description: str = "Not comparable"
-    after: str = ""
-    before: str = ""
-
-
-@dataclass
-class Failure(ASVChange):
-    mark: ResultMark = ResultMark.FAILURE
-    color: ResultColor = ResultColor.RED
-    description: str = "Introduced a failure"
-    after: str = "Failed"
-    before: str = "Succeeded"
-
-
-@dataclass
-class Fixed(ASVChange):
-    mark: ResultMark = ResultMark.FIXED
-    color: ResultColor = ResultColor.GREEN
-    description: str = "Fixed a failure"
-    after: str = "Succeeded"
-    before: str = "Failed"
-
-
-@dataclass
-class NoChange(ASVChange):
-    mark: ResultMark = ResultMark.UNCHANGED
-    color: ResultColor = ResultColor.BLACK
-    description: str = "Both failed or either was skipped or no significant change"
-    after: str = ""
-    before: str = ""
-
-
-@dataclass
-class Better(ASVChange):
-    mark: ResultMark = ResultMark.BETTER
-    color: ResultColor = ResultColor.GREEN
-    description: str = "Relative improvement"
-    after: str = "Better"
-    before: str = "Worse"
-
-
-@dataclass
-class Worsened(ASVChange):
-    mark: ResultMark = ResultMark.WORSE
-    color: ResultColor = ResultColor.RED
-    description: str = "Relatively worse"
-    after: str = "Worse"
-    before: str = "Better"
+from asv_spyglass.results import PreparedResult, ASVBench, result_iter
+from asv_spyglass._num import Ratio
 
 
 class ResultPreparer:
@@ -171,6 +89,61 @@ class ResultPreparer:
         )
 
 
+def _determine_result_color_and_mark(asv1: ASVBench, asv2: ASVBench, factor, use_stats):
+    if (
+        asv1.version is not None
+        and asv2.version is not None
+        and asv1.version != asv2.version
+    ):
+        # not comparable
+        color = "lightgrey"
+        mark = "x"
+    elif asv1.time is not None and asv2.time is None:
+        # introduced a failure
+        color = "red"
+        mark = "!"
+        worsened = True
+    elif asv1.time is None and asv2.time is not None:
+        # fixed a failure
+        color = "green"
+        mark = " "
+        improved = True
+    elif asv1.time is None and asv2.time is None:
+        # both failed
+        color = "default"
+        mark = " "
+    elif _isna(asv1.time) or _isna(asv2.time):
+        # either one was skipped
+        color = "default"
+        mark = " "
+    elif _is_result_better(
+        asv2.time,
+        asv1.time,
+        asv2.stats,
+        asv1.stats,
+        factor,
+        use_stats=use_stats,
+    ):
+        color = "green"
+        mark = "-"
+        improved = True
+    elif _is_result_better(
+        asv1.time,
+        asv2.time,
+        asv1.stats,
+        asv2.stats,
+        factor,
+        use_stats=use_stats,
+    ):
+        color = "red"
+        mark = "+"
+        worsened = True
+    else:
+        color = "default"
+        mark = " "
+    return (color, mark)
+
+
 def do_compare(
     b1,
     b2,
@@ -192,27 +165,18 @@ def do_compare(
 
     # Prepare results using the ResultPreparer class
     preparer = ResultPreparer(benchmarks)
-    prepared_results_1 = preparer.prepare(res_1)
-    prepared_results_2 = preparer.prepare(res_2)
-    # Kanged from compare.py
+    pr1 = preparer.prepare(res_1)
+    pr2 = preparer.prepare(res_2)
 
     # Extract data from prepared results
-    results_1 = prepared_results_1.results
-    results_2 = prepared_results_2.results
-    ss_1 = prepared_results_1.stats
-    ss_2 = prepared_results_2.stats
-    versions_1 = prepared_results_1.versions
-    versions_2 = prepared_results_2.versions
-    units = prepared_results_1.units
-
     machine_env_names = set()
-    mname_1 = f"{prepared_results_1.machine_name}/{prepared_results_1.env_name}"
-    mname_2 = f"{prepared_results_2.machine_name}/{prepared_results_2.env_name}"
+    mname_1 = f"{pr1.machine_name}/{pr1.env_name}"
+    mname_2 = f"{pr2.machine_name}/{pr2.env_name}"
     machine_env_names.add(mname_1)
     machine_env_names.add(mname_2)
 
-    benchmarks_1 = set(results_1.keys())
-    benchmarks_2 = set(results_2.keys())
+    benchmarks_1 = set(pr1.results.keys())
+    benchmarks_2 = set(pr2.results.keys())
     joint_benchmarks = sorted(list(benchmarks_1 | benchmarks_2))
     bench = {}
 
@@ -228,104 +192,32 @@ def do_compare(
     improved = False
 
     for benchmark in joint_benchmarks:
-        if benchmark in results_1:
-            time_1 = results_1[benchmark]
-        else:
-            time_1 = math.nan
+        asv1 = ASVBench(benchmark, pr1)
+        asv2 = ASVBench(benchmark, pr2)
 
-        if benchmark in results_2:
-            time_2 = results_2[benchmark]
-        else:
-            time_2 = math.nan
-
-        if benchmark in ss_1 and ss_1[benchmark][0]:
-            err_1 = get_err(time_1, ss_1[benchmark][0])
-        else:
-            err_1 = None
-
-        if benchmark in ss_2 and ss_2[benchmark][0]:
-            err_2 = get_err(time_2, ss_2[benchmark][0])
-        else:
-            err_2 = None
-
-        version_1 = versions_1.get(benchmark)
-        version_2 = versions_2.get(benchmark)
-
-        if _isna(time_1) or _isna(time_2):
-            ratio = "n/a"
-            ratio_num = 1e9
-        else:
-            try:
-                ratio_num = time_2 / time_1
-                ratio = f"{ratio_num:6.2f}"
-            except ZeroDivisionError:
-                ratio_num = 1e9
-                ratio = "n/a"
-
-        if version_1 is not None and version_2 is not None and version_1 != version_2:
-            # not comparable
-            color = "lightgrey"
-            mark = "x"
-        elif time_1 is not None and time_2 is None:
-            # introduced a failure
-            color = "red"
-            mark = "!"
-            worsened = True
-        elif time_1 is None and time_2 is not None:
-            # fixed a failure
-            color = "green"
-            mark = " "
-            improved = True
-        elif time_1 is None and time_2 is None:
-            # both failed
-            color = "default"
-            mark = " "
-        elif _isna(time_1) or _isna(time_2):
-            # either one was skipped
-            color = "default"
-            mark = " "
-        elif _is_result_better(
-            time_2,
-            time_1,
-            ss_2.get(benchmark),
-            ss_1.get(benchmark),
+        ratio = Ratio(asv1.time, asv1.time)
+        color, mark = _determine_result_color_and_mark(
+            asv1,
+            asv2,
             factor,
-            use_stats=use_stats,
-        ):
-            color = "green"
-            mark = "-"
-            improved = True
-        elif _is_result_better(
-            time_1,
-            time_2,
-            ss_1.get(benchmark),
-            ss_2.get(benchmark),
-            factor,
-            use_stats=use_stats,
-        ):
-            color = "red"
-            mark = "+"
-            worsened = True
-        else:
-            color = "default"
-            mark = " "
+            use_stats,
+        )
 
+        if mark == " ":
             # Mark statistically insignificant results
             if _is_result_better(
-                time_1, time_2, None, None, factor
-            ) or _is_result_better(time_2, time_1, None, None, factor):
-                ratio = "~" + ratio.strip()
+                asv1.time, asv2.time, None, None, factor
+            ) or _is_result_better(asv2.time, asv1.time, None, None, factor):
+                ratio.is_insignificant = True
 
-        if only_changed and mark in (" ", "x"):
+        if only_changed and mark in (" ", "x", "*"):
             continue
-
-        unit = units[benchmark]
 
         details = "{0:1s} {1:>15s}  {2:>15s} {3:>8s}  ".format(
             mark,
-            human_value(time_1, unit, err=err_1),
-            human_value(time_2, unit, err=err_2),
-            ratio,
+            human_value(asv1.time, asv1.unit, err=asv1.err),
+            human_value(asv2.time, asv2.unit, err=asv2.err),
+            str(ratio),
         )
         split_line = details.split()
         if len(machine_env_names) > 1:
@@ -353,7 +245,7 @@ def do_compare(
     titles["lightgrey"] = "Benchmarks that are not comparable:"
     titles["all"] = "All benchmarks:"
 
-    log.flush()
+    all_tables = {}  # Dictionary to hold tables for each key
 
     for key in keys:
         if len(bench[key]) == 0:
@@ -386,14 +278,29 @@ def do_compare(
             raise ValueError("Unknown 'sort'")
 
         print(worsened, improved)
-        return tabulate.tabulate(
-            bench[key],
-            headers=[
+        table_data = [
+            [
+                row[0],  # Change mark
+                row[1],  # Before
+                row[2],  # After
+                row[3],  # Ratio
+                row[4],  # Benchmark name
+            ]
+            for row in bench[key]
+        ]
+
+        all_tables[key] = {
+            "title": titles[key],
+            "headers": [
                 "Change",
                 f"Before {name_1}",
                 f"After {name_2}",
                 "Ratio",
                 "Benchmark (Parameter)",
             ],
-            tablefmt="github",
-        )
+            "table_data": table_data,
+            "worsened": worsened,  # Pass worsened and improved flags
+            "improved": improved,
+        }
+
+    return all_tables
