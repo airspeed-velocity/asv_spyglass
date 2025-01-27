@@ -4,6 +4,7 @@ from asv import results
 from asv.commands.compare import _is_result_better, _isna, unroll_result
 from asv.util import human_value
 from asv_runner.console import color_print
+import polars as pl
 
 from asv_spyglass._asv_ro import ReadOnlyASVBenchmarks
 from asv_spyglass._num import Ratio
@@ -15,6 +16,7 @@ from asv_spyglass.changes import (
     Incomparable,
     NoChange,
     Worse,
+    ResultMark,
 )
 from asv_spyglass.results import ASVBench, PreparedResult, result_iter
 
@@ -156,33 +158,20 @@ def do_compare(
     # Initialize benchmarks
     benchmarks = ReadOnlyASVBenchmarks(Path(bdat)).benchmarks
 
-    # Prepare results using the ResultPreparer class
+    # Prepare results
     preparer = ResultPreparer(benchmarks)
     pr1 = preparer.prepare(res_1)
     pr2 = preparer.prepare(res_2)
 
-    # Extract data from prepared results
-    machine_env_names = set()
+    # Extract data
     mname_1 = f"{pr1.machine_name}/{pr1.env_name}"
     mname_2 = f"{pr2.machine_name}/{pr2.env_name}"
-    machine_env_names.add(mname_1)
-    machine_env_names.add(mname_2)
+    machine_env_names = {mname_1, mname_2}
 
-    benchmarks_1 = set(pr1.results.keys())
-    benchmarks_2 = set(pr2.results.keys())
-    joint_benchmarks = sorted(list(benchmarks_1 | benchmarks_2))
-    bench = {}
+    # Create a list to collect data for the DataFrame
+    data = []
 
-    if split:
-        bench["green"] = []
-        bench["red"] = []
-        bench["lightgrey"] = []
-        bench["default"] = []
-    else:
-        bench["all"] = []
-
-    states = []
-    for benchmark in joint_benchmarks:
+    for benchmark in sorted(set(pr1.results.keys()) | set(pr2.results.keys())):
         asv1 = ASVBench(benchmark, pr1)
         asv2 = ASVBench(benchmark, pr2)
 
@@ -193,7 +182,6 @@ def do_compare(
             factor,
             use_stats,
         )
-        states.append(diffinfo.state)
 
         if isinstance(diffinfo, NoChange):
             # Mark statistically insignificant results
@@ -202,96 +190,100 @@ def do_compare(
             ) or _is_result_better(asv2.time, asv1.time, None, None, factor):
                 ratio.is_insignificant = True
 
-        if only_changed and diffinfo.mark.value in (" ", "x", "*"):
+        if only_changed and diffinfo.mark in (
+            ResultMark.UNCHANGED,
+            ResultMark.INCOMPARABLE,
+            ResultMark.FIXED,
+        ):
             continue
 
-        details = (
-            f"{diffinfo.mark:1s} "
-            f"{human_value(asv1.time, asv1.unit, err=asv1.err):>15s} "
-            f"{human_value(asv2.time, asv2.unit, err=asv2.err):>15s} "
-            f"{str(ratio):>8s} "
-        )
-        split_line = details.split()
+        # Determine benchmark name format
         if len(machine_env_names) > 1:
             benchmark_name = f"{benchmark} [{mname_1} -> {mname_2}]"
         else:
             benchmark_name = benchmark
-        if len(split_line) == 4:
-            split_line += [benchmark_name]
-        else:
-            split_line = [" "] + split_line + [benchmark_name]
-        if split:
-            bench[diffinfo.color].append(split_line)
-        else:
-            bench["all"].append(split_line)
+
+        assert asv1.unit == asv2.unit, "Units for benchmark must match"
+
+        data.append(
+            {
+                "benchmark": benchmark_name,
+                "mark": diffinfo.mark,
+                "before": asv1.time,
+                "after": asv2.time,
+                "ratio": ratio.val,
+                "is_insignificant": ratio.is_insignificant,
+                "err_before": asv1.err,
+                "err_after": asv2.err,
+                "unit": asv1.unit or asv2.unit,
+                "color": diffinfo.color.name.lower(),
+                "state": diffinfo.state,
+            }
+        )
+
+    # Create a Polars DataFrame
+    df = pl.DataFrame(data)
+
+    # Sort the DataFrame
+    if sort == "ratio":
+        df = df.sort("ratio", descending=True)
+    elif sort == "name":
+        df = df.sort("benchmark")
+
+    # Get commit names or use empty strings
+    name_1 = ""  # commit_names.get(hash_1, "")
+    name_2 = ""  # commit_names.get(hash_2, "")
+    name_1 = f"<{name_1}>" if name_1 else ""
+    name_2 = f"<{name_2}>" if name_2 else ""
+
+    # Construct the table data for each category
+    all_tables = {}
 
     if split:
-        keys = ["green", "default", "red", "lightgrey"]
+        colors = ["green", "default", "red", "lightgrey"]
     else:
-        keys = ["all"]
+        colors = ["all"]
+        df = df.with_columns(pl.lit("all").alias("color"))
 
-    titles = {}
-    titles["green"] = "Benchmarks that have improved:"
-    titles["default"] = "Benchmarks that have stayed the same:"
-    titles["red"] = "Benchmarks that have got worse:"
-    titles["lightgrey"] = "Benchmarks that are not comparable:"
-    titles["all"] = "All benchmarks:"
-
-    all_tables = {}  # Dictionary to hold tables for each key
-
-    for key in keys:
-        if len(bench[key]) == 0:
-            continue
-
-        if not only_changed:
-            color_print("")
-            color_print(titles[key])
-            color_print("")
-
-        name_1 = False  # commit_names.get(hash_1)
-        if name_1:
-            name_1 = f"<{name_1}>"
+    for color in colors:
+        if color != "all":
+            filtered_df = df.filter(pl.col("color") == color)
         else:
-            name_1 = ""
+            filtered_df = df
 
-        name_2 = False  # commit_names.get(hash_2)
-        if name_2:
-            name_2 = f"<{name_2}>"
-        else:
-            name_2 = ""
+        if not filtered_df.is_empty():
+            table_data = []
+            for row in filtered_df.rows():
+                table_data.append(
+                    [
+                        str(row[1]),  # mark (convert to string)
+                        human_value(row[2], row[8], err=row[6]),  # before
+                        human_value(row[3], row[8], err=row[7]),  # after
+                        str(Ratio(row[2], row[3])),  # ratio
+                        row[0],  # benchmark
+                    ]
+                )
+            if color == "all":
+                title = "All benchmarks:"
+            else:
+                title = {
+                    "green": "Benchmarks that have improved:",
+                    "default": "Benchmarks that have stayed the same:",
+                    "red": "Benchmarks that have got worse:",
+                    "lightgrey": "Benchmarks that are not comparable:",
+                }[color]
 
-        if sort == "default":
-            pass
-        elif sort == "ratio":
-            bench[key].sort(key=lambda v: v[3], reverse=True)
-        elif sort == "name":
-            bench[key].sort(key=lambda v: v[2])
-        else:
-            raise ValueError("Unknown 'sort'")
-
-        print(states)
-        table_data = [
-            [
-                row[0],  # Change mark
-                row[1],  # Before
-                row[2],  # After
-                row[3],  # Ratio
-                row[4],  # Benchmark name
-            ]
-            for row in bench[key]
-        ]
-
-        all_tables[key] = {
-            "title": titles[key],
-            "headers": [
-                "Change",
-                f"Before {name_1}",
-                f"After {name_2}",
-                "Ratio",
-                "Benchmark (Parameter)",
-            ],
-            "table_data": table_data,
-            "states": states,
-        }
+            all_tables[color] = {
+                "title": title,
+                "headers": [
+                    "Change",
+                    f"Before {name_1}",
+                    f"After {name_2}",
+                    "Ratio",
+                    "Benchmark (Parameter)",
+                ],
+                "table_data": table_data,
+                "states": filtered_df.select(pl.col("state")).to_series().to_list(),
+            }
 
     return all_tables

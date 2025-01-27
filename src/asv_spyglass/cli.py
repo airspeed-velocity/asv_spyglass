@@ -47,7 +47,7 @@ def cli():
     show_default=True,
     help="Sort output by change, ratio, or name.",
 )
-def compare(b1, b2, bconf, factor, split, only_changed, sort):  # Renamed to 'compare'
+def compare(b1, b2, bconf, factor, split, only_changed, sort):
     """
     Compare two ASV result files.
     """
@@ -90,10 +90,11 @@ def compare(b1, b2, bconf, factor, split, only_changed, sort):  # Renamed to 'co
         console.print(table)
 
         # Print summary of worsened/improved status
-        if av_x := sum([x.value for x in table_data["states"]]) > 0:
-            console.print("[bold green]Improvement![/]")
-        elif av_x < 0:
-            console.print("[bold red]Regression![/]")
+        if not split:
+            if (av_x := sum([x.value for x in table_data["states"]])) > 0:
+                console.print("[bold green]Net Improvement![/]")
+            elif av_x < 0:
+                console.print("[bold red]Net Regression![/]")
 
 
 @cli.command(cls=RichCommand)

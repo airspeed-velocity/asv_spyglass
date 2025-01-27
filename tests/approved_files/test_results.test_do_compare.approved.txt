@@ -7,7 +7,7 @@
          'table_data': [['-',
                          '94.8±30μs',
                          '28.4±0.2μs',
-                         '0.30',
+                         '  0.30',
                          'benchmarks.TimeSuite.time_add_arr '
                          '[rgx1gen11/conda-py3.11-numpy -> '
                          'rgx1gen11/virtualenv-py3.12-numpy]']],
