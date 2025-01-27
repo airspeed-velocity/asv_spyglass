@@ -118,10 +118,8 @@ class ASVBench:
         self._pr = pr
         self.time = pr.results.get(self.name, math.nan)
         self.stats = pr.stats.get(self.name, (None,))
-        self.err = (
-            get_err(self.time, self.stats[0])
-            if self.name in pr.stats.get(self.name)
-            else None
-        )
+        self.err = None
+        if self.name in pr.stats.keys() and self.stats[0]:
+            self.err = get_err(self.time, self.stats[0])
         self.version = pr.versions.get(self.name)
         self.unit = pr.units.get(self.name)
