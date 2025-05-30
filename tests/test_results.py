@@ -1,7 +1,9 @@
 import pprint as pp
+from pathlib import Path
 
-from approvaltests.approvals import verify
-from asv import results
+from approvaltests.approvals import verify  # type: ignore
+# TODO - Add typing to `asv`
+from asv import results  # type: ignore[import-untyped]
 
 from asv_spyglass._asv_ro import ReadOnlyASVBenchmarks
 from asv_spyglass._aux import getstrform
@@ -12,14 +14,15 @@ from asv_spyglass.compare import (
 )
 
 
-def test_result_iter(shared_datadir):
+# TODO - Where is this `shared_datadir` defined?
+def test_result_iter(shared_datadir: Path):
     res = results.Results.load(
         getstrform(shared_datadir / "a0f29428-conda-py3.11-numpy.json")
     )
     verify(pp.pformat([tuple(x) for x in (result_iter(res))]))
 
 
-def test_do_compare(shared_datadir):
+def test_do_compare(shared_datadir: Path):
     verify(
         pp.pformat(
             do_compare(
@@ -31,7 +34,7 @@ def test_do_compare(shared_datadir):
     )
 
 
-def test_result_df(shared_datadir):
+def test_result_df(shared_datadir: Path):
     res = results.Results.load(
         getstrform(shared_datadir / "d6b286b8-rattler-py3.12-numpy.json")
     )

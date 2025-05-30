@@ -2,7 +2,8 @@ from pathlib import Path
 
 import click
 import polars as pl
-from asv import results
+# TODO - Add typing to `asv`
+from asv import results  # type: ignore[import-untyped]
 from rich import box
 from rich.console import Console
 from rich.table import Table
@@ -107,6 +108,7 @@ def compare(b1, b2, bconf, factor, split, only_changed, sort):
 
 
 @cli.command(cls=RichCommand)
+# TODO - Whare are these `bdat` and `bres`?
 @click.argument("bres", type=click.Path(exists=True), required=True)
 @click.argument("bdat", type=click.Path(exists=True), required=True)
 @click.option(
@@ -114,7 +116,7 @@ def compare(b1, b2, bconf, factor, split, only_changed, sort):
     type=click.Path(),
     help="Save data to csv",
 )
-def to_df(bres, bdat, csv):
+def to_df(bres, bdat, csv: str):
     """
     Generate a dataframe from an ASV result file.
     """
@@ -123,7 +125,10 @@ def to_df(bres, bdat, csv):
     preparer = ResultPreparer(benchdat)
     df = preparer.prepare(res).to_df()
     if csv:
-        df.to_csv(csv)
+        # TODO - No method `to_csv()`?? Is this tested? Which version of polar is this?
+        #        Should it be `write_csv()`?
+        #        See https://stackoverflow.com/questions/79212561/equivalent-to-pandas-to-csv-without-filename-for-polars
+        df.write_csv(csv)
     else:
         with pl.Config(
             tbl_formatting="ASCII_MARKDOWN",

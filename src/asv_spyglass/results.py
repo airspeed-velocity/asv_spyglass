@@ -5,8 +5,10 @@ from collections import namedtuple
 from dataclasses import dataclass, field
 
 import polars as pl
-from asv_runner.statistics import get_err
+# TODO - Add typing to `asv_runner`
+from asv_runner.statistics import get_err  # type: ignore[import-untyped]
 
+# TODO - Use `NamedTuple` for typing
 ASVResult = namedtuple(
     "ASVResult",
     [
@@ -22,6 +24,7 @@ ASVResult = namedtuple(
 )
 
 
+# TODO - What is `bdot`?
 def result_iter(bdot):
     for key in bdot.get_all_result_keys():
         params = bdot.get_result_params(key)
@@ -45,6 +48,8 @@ def result_iter(bdot):
 class PreparedResult:
     """Augmented with information from the benchmarks.json"""
 
+    # TODO - More detailed types - do these dicts have string keys, or sth else?
+    #        What are the types of the values?
     units: dict
     results: dict
     stats: dict

@@ -1,12 +1,12 @@
 import math
 from dataclasses import dataclass
 
-
-@dataclass
-class BenchNum:
-    val: float
-    err: float | None
-    unit: str | None
+# TODO - DELETE - NOT USED
+# @dataclass
+# class BenchNum:
+#     val: float
+#     err: float | None
+#     unit: str | None
 
 
 class Ratio:
@@ -34,11 +34,13 @@ class Ratio:
             - "n/a" if the ratio is undefined (val is math.inf).
             - "~" followed by the formatted ratio if is_insignificant is True.
             - A formatted string with 2 decimal places otherwise.
-
-        _is_invalid(self, t1, t2):
-            A private helper method to check if the inputs are invalid for ratio
-            calculation.
     """
+
+    # TODO - DOCUMENT ATTRS LIKE THIS
+    _t1: float | None
+    """The first value (denominator)."""
+    _t2: float | None
+    """The second value (numerator)."""    
 
     def __init__(self, t1: float | None, t2: float | None):
         """
@@ -53,7 +55,8 @@ class Ratio:
         self.is_insignificant = False
         self.val = None
 
-        if self._is_invalid(t1, t2):
+        # Check for invalid values
+        if t1 is None or t2 is None or math.isnan(t1) or math.isnan(t2):
             self.val = math.inf
         else:
             try:
@@ -75,16 +78,3 @@ class Ratio:
             return "~" + f"{self.val:6.2f}".strip()
         else:
             return f"{self.val:6.2f}"
-
-    def _is_invalid(self, t1, t2):
-        """
-        Checks if the inputs are invalid for ratio calculation.
-
-        Args:
-            t1 (float | None): The first value.
-            t2 (float | None): The second value.
-
-        Returns:
-            bool: True if either t1 or t2 is None or NaN, False otherwise.
-        """
-        return t1 is None or t2 is None or math.isnan(t1) or math.isnan(t2)
