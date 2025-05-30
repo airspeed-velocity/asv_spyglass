@@ -162,6 +162,14 @@ Conduct](https://github.com/airspeed-velocity/asv_spyglass/blob/main/CODE_OF_CON
 
 ## Developing locally
 
+### Installing
+
+Pip:
+
+```bash
+pip install .
+```
+
 ### Testing
 
 Since the output of these are mostly text oriented, and the inputs are `json`,

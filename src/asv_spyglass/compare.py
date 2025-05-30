@@ -1,19 +1,33 @@
-import math
 from pathlib import Path
 
 import polars as pl
-import tabulate
-from asv import results
-from asv.commands.compare import _is_result_better, _isna, unroll_result
-from asv.console import log
-from asv.util import human_value
-from asv_runner.console import color_print
-from asv_runner.statistics import get_err
+# TODO - Add typing to `asv`
+from asv import results  # type: ignore[import-untyped]
+from asv.commands.compare import _is_result_better, _isna, unroll_result  # type: ignore[import-untyped]
+from asv.util import human_value  # type: ignore[import-untyped]
 
 from asv_spyglass._asv_ro import ReadOnlyASVBenchmarks
-from asv_spyglass.results import PreparedResult, result_iter
+from asv_spyglass._num import Ratio
+from asv_spyglass.changes import (
+    ASVChangeInfo,
+    Better,
+    Failure,
+    Fixed,
+    Incomparable,
+    NoChange,
+    ResultMark,
+    Worse,
+)
+from asv_spyglass.results import ASVBench, PreparedResult, result_iter
 
 
+# TODO - Again, instead of having a class with a single method, this could be
+#        simplified to a function, to reduce the risk of breaking things by
+#        misconfiguring instance state.
+#        So it could be:
+#        ```py
+#        prepared_results = prepare_results(benchmarks, result_data)
+#        ```
 class ResultPreparer:
     """
     Prepares benchmark results for comparison by extracting relevant data
@@ -29,6 +43,7 @@ class ResultPreparer:
         """
         self.benchmarks = benchmarks
 
+    # TODO - What is the shape of result_data?
     def prepare(self, result_data):
         """
         Processes result data and returns extracted information.
@@ -40,6 +55,7 @@ class ResultPreparer:
             tuple: A tuple containing units, results, stats, versions,
                    and the machine/environment name.
         """
+        # TODO - set type hints for these
         units = {}
         results = {}
         ss = {}
@@ -58,7 +74,10 @@ class ResultPreparer:
             machine,
             env_name,
         ) in result_iter(result_data):
-            machine_env_name = f"{machine}/{env_name}"
+            if machine_env_name is None:
+                machine_env_name = f"{machine}/{env_name}"
+
+            # TODO - Add type hints to unroll_result
             for name, value, stats, samples in unroll_result(
                 key, params, value, stats, samples
             ):
@@ -76,7 +95,9 @@ class ResultPreparer:
                     "param_names"
                 )
 
+        # TODO - CHECK that result_data is not empty, otherwise this will throw
         machine, env_name = machine_env_name.split("/")
+
         return PreparedResult(
             units=units,
             results=results,
@@ -86,6 +107,210 @@ class ResultPreparer:
             env_name=env_name,
             param_names=param_names,
         )
+
+
+def _get_change_info(
+    asv1: ASVBench, asv2: ASVBench, factor, use_stats
+) -> ASVChangeInfo:
+    if (
+        asv1.version is not None
+        and asv2.version is not None
+        and asv1.version != asv2.version
+    ):
+        # not comparable
+        return Incomparable()
+    elif asv1.time is not None and asv2.time is None:
+        # introduced a failure
+        return Failure()
+    elif asv1.time is None and asv2.time is not None:
+        # fixed a failure
+        return Fixed()
+    elif asv1.time is None and asv2.time is None:
+        # both failed
+        return NoChange()
+    elif _isna(asv1.time) or _isna(asv2.time):
+        # either one was skipped
+        return NoChange()
+    elif _is_result_better(
+        asv2.time,
+        asv1.time,
+        asv2.stats_n_samples,
+        asv1.stats_n_samples,
+        factor,
+        use_stats=use_stats,
+    ):
+        return Better()
+    elif _is_result_better(
+        asv1.time,
+        asv2.time,
+        asv1.stats_n_samples,
+        asv2.stats_n_samples,
+        factor,
+        use_stats=use_stats,
+    ):
+        return Worse()
+    else:
+        return NoChange()
+
+
+def _create_comparison_dataframe(
+    pr1: PreparedResult,
+    pr2: PreparedResult,
+    factor: float,
+    only_changed: bool,
+    use_stats: bool,
+):
+    """
+    Creates a Polars DataFrame comparing results from two PreparedResult objects.
+
+    Args:
+        pr1 (PreparedResult): The first PreparedResult object.
+        pr2 (PreparedResult): The second PreparedResult object.
+        factor (float): The factor used for determining significance.
+        only_changed (bool): Whether to only include changed benchmarks.
+        use_stats (bool): Whether to use statistical significance.
+
+    Returns:
+        pl.DataFrame: A DataFrame with comparison data.
+    """
+    data = []
+    machine_env_names = {
+        f"{pr1.machine_name}/{pr1.env_name}",
+        f"{pr2.machine_name}/{pr2.env_name}",
+    }
+
+    for benchmark in sorted(set(pr1.results.keys()) | set(pr2.results.keys())):
+        asv1 = ASVBench(benchmark, pr1)
+        asv2 = ASVBench(benchmark, pr2)
+
+        ratio = Ratio(asv1.time, asv2.time)
+        diffinfo = _get_change_info(
+            asv1,
+            asv2,
+            factor,
+            use_stats,
+        )
+
+        if isinstance(diffinfo, NoChange):
+            # Mark statistically insignificant results
+            if _is_result_better(
+                asv1.time, asv2.time, None, None, factor
+            ) or _is_result_better(asv2.time, asv1.time, None, None, factor):
+                ratio.is_insignificant = True
+
+        if only_changed and diffinfo.mark in (
+            ResultMark.UNCHANGED,
+            ResultMark.INCOMPARABLE,
+            ResultMark.FIXED,
+        ):
+            continue
+
+        # Determine benchmark name format
+        if len(machine_env_names) > 1:
+            benchmark_name = (
+                f"{benchmark} [{pr1.machine_name}/{pr1.env_name}"
+                f" -> {pr2.machine_name}/{pr2.env_name}]"
+            )
+        else:
+            benchmark_name = benchmark
+
+        assert asv1.unit == asv2.unit, "Units for benchmark must match"
+
+        data.append(
+            {
+                "benchmark": benchmark_name,
+                "mark": diffinfo.mark,
+                "before": asv1.time,
+                "after": asv2.time,
+                "ratio": ratio.val,
+                "is_insignificant": ratio.is_insignificant,
+                "err_before": asv1.err,
+                "err_after": asv2.err,
+                "unit": asv1.unit or asv2.unit,  # Use unit from asv1 or asv2
+                "color": diffinfo.color.name.lower(),
+                "state": diffinfo.state,
+            }
+        )
+
+    return pl.DataFrame(data)
+
+
+def _format_comparison_tables(
+    df: pl.DataFrame, sort: str, name_1: str, name_2: str, split: bool
+):
+    """
+    Formats a comparison DataFrame into tables for display.
+
+    Args:
+        df (pl.DataFrame): The comparison DataFrame.
+        sort (str): The sorting method ("ratio" or "name").
+        name_1 (str): The name of the first commit/result.
+        name_2 (str): The name of the second commit/result.
+
+    Returns:
+        dict: A dictionary of formatted tables.
+    """
+
+    # Sort the DataFrame
+    if sort == "ratio":
+        df = df.sort("ratio", descending=True)
+    elif sort == "name":
+        df = df.sort("benchmark")
+
+    # Construct the table data for each category
+    all_tables = {}
+
+    if split:
+        colors = ["green", "default", "red", "lightgrey"]
+    else:
+        colors = ["all"]
+        df = df.with_columns(pl.lit("all").alias("color"))
+
+    for color in colors:
+        if color != "all":
+            filtered_df = df.filter(pl.col("color") == color)
+        else:
+            filtered_df = df
+
+        if filtered_df.is_empty():
+            continue
+
+        table_data = []
+        for row in filtered_df.iter_rows(named=True):
+            table_data.append(
+                [
+                    str(row["mark"]),
+                    human_value(row["before"], row["unit"], err=row["err_before"]),
+                    human_value(row["after"], row["unit"], err=row["err_after"]),
+                    str(Ratio(row["before"], row["after"])),
+                    row["benchmark"],
+                ]
+            )
+
+        if color == "all":
+            title = "All benchmarks:"
+        else:
+            title = {
+                "green": "Benchmarks that have improved:",
+                "default": "Benchmarks that have stayed the same:",
+                "red": "Benchmarks that have got worse:",
+                "lightgrey": "Benchmarks that are not comparable:",
+            }[color]
+
+        all_tables[color] = {
+            "title": title,
+            "headers": [
+                "Change",
+                f"Before {name_1}",
+                f"After {name_2}",
+                "Ratio",
+                "Benchmark (Parameter)",
+            ],
+            "table_data": table_data,
+            "states": filtered_df.select(pl.col("state")).to_series().to_list(),
+        }
+
+    return all_tables
 
 
 def do_compare(
@@ -107,210 +332,21 @@ def do_compare(
     # Initialize benchmarks
     benchmarks = ReadOnlyASVBenchmarks(Path(bdat)).benchmarks
 
-    # Prepare results using the ResultPreparer class
+    # Prepare results
     preparer = ResultPreparer(benchmarks)
-    prepared_results_1 = preparer.prepare(res_1)
-    prepared_results_2 = preparer.prepare(res_2)
-    # Kanged from compare.py
+    pr1 = preparer.prepare(res_1)
+    pr2 = preparer.prepare(res_2)
 
-    # Extract data from prepared results
-    results_1 = prepared_results_1.results
-    results_2 = prepared_results_2.results
-    ss_1 = prepared_results_1.stats
-    ss_2 = prepared_results_2.stats
-    versions_1 = prepared_results_1.versions
-    versions_2 = prepared_results_2.versions
-    units = prepared_results_1.units
+    # Create the comparison DataFrame
+    df = _create_comparison_dataframe(pr1, pr2, factor, only_changed, use_stats)
 
-    machine_env_names = set()
-    mname_1 = f"{prepared_results_1.machine_name}/{prepared_results_1.env_name}"
-    mname_2 = f"{prepared_results_2.machine_name}/{prepared_results_2.env_name}"
-    machine_env_names.add(mname_1)
-    machine_env_names.add(mname_2)
+    # Get commit names or use empty strings
+    name_1 = ""  # commit_names.get(hash_1, "")
+    name_2 = ""  # commit_names.get(hash_2, "")
+    name_1 = f"<{name_1}>" if name_1 else ""
+    name_2 = f"<{name_2}>" if name_2 else ""
 
-    benchmarks_1 = set(results_1.keys())
-    benchmarks_2 = set(results_2.keys())
-    joint_benchmarks = sorted(list(benchmarks_1 | benchmarks_2))
-    bench = {}
+    # Format the DataFrame into tables
+    all_tables = _format_comparison_tables(df, sort, name_1, name_2, split)
 
-    if split:
-        bench["green"] = []
-        bench["red"] = []
-        bench["lightgrey"] = []
-        bench["default"] = []
-    else:
-        bench["all"] = []
-
-    worsened = False
-    improved = False
-
-    for benchmark in joint_benchmarks:
-        if benchmark in results_1:
-            time_1 = results_1[benchmark]
-        else:
-            time_1 = math.nan
-
-        if benchmark in results_2:
-            time_2 = results_2[benchmark]
-        else:
-            time_2 = math.nan
-
-        if benchmark in ss_1 and ss_1[benchmark][0]:
-            err_1 = get_err(time_1, ss_1[benchmark][0])
-        else:
-            err_1 = None
-
-        if benchmark in ss_2 and ss_2[benchmark][0]:
-            err_2 = get_err(time_2, ss_2[benchmark][0])
-        else:
-            err_2 = None
-
-        version_1 = versions_1.get(benchmark)
-        version_2 = versions_2.get(benchmark)
-
-        if _isna(time_1) or _isna(time_2):
-            ratio = "n/a"
-            ratio_num = 1e9
-        else:
-            try:
-                ratio_num = time_2 / time_1
-                ratio = f"{ratio_num:6.2f}"
-            except ZeroDivisionError:
-                ratio_num = 1e9
-                ratio = "n/a"
-
-        if version_1 is not None and version_2 is not None and version_1 != version_2:
-            # not comparable
-            color = "lightgrey"
-            mark = "x"
-        elif time_1 is not None and time_2 is None:
-            # introduced a failure
-            color = "red"
-            mark = "!"
-            worsened = True
-        elif time_1 is None and time_2 is not None:
-            # fixed a failure
-            color = "green"
-            mark = " "
-            improved = True
-        elif time_1 is None and time_2 is None:
-            # both failed
-            color = "default"
-            mark = " "
-        elif _isna(time_1) or _isna(time_2):
-            # either one was skipped
-            color = "default"
-            mark = " "
-        elif _is_result_better(
-            time_2,
-            time_1,
-            ss_2.get(benchmark),
-            ss_1.get(benchmark),
-            factor,
-            use_stats=use_stats,
-        ):
-            color = "green"
-            mark = "-"
-            improved = True
-        elif _is_result_better(
-            time_1,
-            time_2,
-            ss_1.get(benchmark),
-            ss_2.get(benchmark),
-            factor,
-            use_stats=use_stats,
-        ):
-            color = "red"
-            mark = "+"
-            worsened = True
-        else:
-            color = "default"
-            mark = " "
-
-            # Mark statistically insignificant results
-            if _is_result_better(
-                time_1, time_2, None, None, factor
-            ) or _is_result_better(time_2, time_1, None, None, factor):
-                ratio = "~" + ratio.strip()
-
-        if only_changed and mark in (" ", "x"):
-            continue
-
-        unit = units[benchmark]
-
-        details = "{0:1s} {1:>15s}  {2:>15s} {3:>8s}  ".format(
-            mark,
-            human_value(time_1, unit, err=err_1),
-            human_value(time_2, unit, err=err_2),
-            ratio,
-        )
-        split_line = details.split()
-        if len(machine_env_names) > 1:
-            benchmark_name = f"{benchmark} [{mname_1} -> {mname_2}]"
-        else:
-            benchmark_name = benchmark
-        if len(split_line) == 4:
-            split_line += [benchmark_name]
-        else:
-            split_line = [" "] + split_line + [benchmark_name]
-        if split:
-            bench[color].append(split_line)
-        else:
-            bench["all"].append(split_line)
-
-    if split:
-        keys = ["green", "default", "red", "lightgrey"]
-    else:
-        keys = ["all"]
-
-    titles = {}
-    titles["green"] = "Benchmarks that have improved:"
-    titles["default"] = "Benchmarks that have stayed the same:"
-    titles["red"] = "Benchmarks that have got worse:"
-    titles["lightgrey"] = "Benchmarks that are not comparable:"
-    titles["all"] = "All benchmarks:"
-
-    log.flush()
-
-    for key in keys:
-        if len(bench[key]) == 0:
-            continue
-
-        if not only_changed:
-            color_print("")
-            color_print(titles[key])
-            color_print("")
-
-        name_1 = False  # commit_names.get(hash_1)
-        if name_1:
-            name_1 = f"<{name_1}>"
-        else:
-            name_1 = ""
-
-        name_2 = False  # commit_names.get(hash_2)
-        if name_2:
-            name_2 = f"<{name_2}>"
-        else:
-            name_2 = ""
-
-        if sort == "default":
-            pass
-        elif sort == "ratio":
-            bench[key].sort(key=lambda v: v[3], reverse=True)
-        elif sort == "name":
-            bench[key].sort(key=lambda v: v[2])
-        else:
-            raise ValueError("Unknown 'sort'")
-
-        print(worsened, improved)
-        return tabulate.tabulate(
-            bench[key],
-            headers=[
-                "Change",
-                f"Before {name_1}",
-                f"After {name_2}",
-                "Ratio",
-                "Benchmark (Parameter)",
-            ],
-            tablefmt="github",
-        )
+    return all_tables

@@ -21,6 +21,12 @@ jobs:
         run: |
           pdm install -G:all
 
+      - name: Mypy
+        shell: pixi run bash -e {0}
+        run: |
+          pdm run pytest
+          pdm build
+
       - name: Test package
         shell: pixi run bash -e {0}
         run: |

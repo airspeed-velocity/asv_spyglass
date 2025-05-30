@@ -1,12 +1,14 @@
 import dataclasses
+import math
 import re
 from collections import namedtuple
+from dataclasses import dataclass, field
 
 import polars as pl
-from asv import results
+# TODO - Add typing to `asv_runner`
+from asv_runner.statistics import get_err  # type: ignore[import-untyped]
 
-from asv_spyglass._asv_ro import ReadOnlyASVBenchmarks
-
+# TODO - Use `NamedTuple` for typing
 ASVResult = namedtuple(
     "ASVResult",
     [
@@ -22,6 +24,7 @@ ASVResult = namedtuple(
 )
 
 
+# TODO - What is `bdot`?
 def result_iter(bdot):
     for key in bdot.get_all_result_keys():
         params = bdot.get_result_params(key)
@@ -41,10 +44,12 @@ def result_iter(bdot):
         )
 
 
-@dataclasses.dataclass
+@dataclass
 class PreparedResult:
     """Augmented with information from the benchmarks.json"""
 
+    # TODO - More detailed types - do these dicts have string keys, or sth else?
+    #        What are the types of the values?
     units: dict
     results: dict
     stats: dict
@@ -54,8 +59,8 @@ class PreparedResult:
     param_names: list
 
     def __iter__(self):
-        for field in dataclasses.fields(self):
-            yield getattr(self, field.name)
+        for _field in dataclasses.fields(self):
+            yield getattr(self, _field.name)
 
     def to_df(self):
         """
@@ -111,3 +116,23 @@ class PreparedResult:
             data.append(row)
 
         return pl.DataFrame(data)
+
+
+@dataclass
+class ASVBench:
+    name: str
+    _pr: PreparedResult
+    time: float = field(init=False)
+    stats_n_samples: tuple = field(init=False)
+    err: float | None = field(init=False)
+    version: str | None = field(init=False)
+    unit: str | None = field(init=False)
+
+    def __post_init__(self):
+        self.time = self._pr.results.get(self.name, math.nan)
+        self.stats_n_samples = self._pr.stats.get(self.name, (None,))
+        self.err = None
+        if self.name in self._pr.stats and self.stats_n_samples[0]:
+            self.err = get_err(self.time, self.stats_n_samples[0])
+        self.version = self._pr.versions.get(self.name)
+        self.unit = self._pr.units.get(self.name)

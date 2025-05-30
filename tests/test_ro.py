@@ -1,19 +1,19 @@
 import pprint as pp
 from pathlib import Path
 
-from approvaltests.approvals import verify
+from approvaltests.approvals import verify  # type: ignore
 
 from asv_spyglass._asv_ro import ReadOnlyASVBenchmarks
 
 
-def test_ro_benchmarks(shared_datadir):
+def test_ro_benchmarks(shared_datadir: Path):
     benchmarks = ReadOnlyASVBenchmarks(
         shared_datadir / "d6b286b8_asv_samples_benchmarks.json"
     )
     verify(pp.pformat(benchmarks))
 
 
-def test_ro_benchmarks_filter(shared_datadir):
+def test_ro_benchmarks_filter(shared_datadir: Path):
     benchmarks = ReadOnlyASVBenchmarks(
         shared_datadir / "d6b286b8_asv_samples_benchmarks.json", "multi"
     )
