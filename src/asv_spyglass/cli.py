@@ -58,6 +58,16 @@ def cli():
     is_flag=True,
     help="Suppress the [machine/env -> machine/env] suffix.",
 )
+@click.option(
+    "--only-improved",
+    is_flag=True,
+    help="Only show improved benchmarks.",
+)
+@click.option(
+    "--only-regressed",
+    is_flag=True,
+    help="Only show regressed benchmarks.",
+)
 def compare(
     b1,
     b2,
@@ -69,10 +79,16 @@ def compare(
     label_before,
     label_after,
     no_env_label,
+    only_improved,
+    only_regressed,
 ):
     """
     Compare two ASV result files.
     """
+    if only_improved and only_regressed:
+        raise click.UsageError(
+            "--only-improved and --only-regressed are mutually exclusive."
+        )
     if not bconf:
         bconf_path = Path(b1).parent.parent / "benchmarks.json"
         if bconf_path.exists():
@@ -98,6 +114,8 @@ def compare(
         label_before=label_before,
         label_after=label_after,
         no_env_label=no_env_label,
+        only_improved=only_improved,
+        only_regressed=only_regressed,
     )
     print(output)
     if worsened:

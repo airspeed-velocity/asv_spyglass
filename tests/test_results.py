@@ -76,6 +76,36 @@ def test_do_compare_worsened_flag(shared_datadir):
     assert improved is True
 
 
+def test_do_compare_only_improved(shared_datadir):
+    """--only-improved filters to green results only."""
+    result, _, _ = do_compare(
+        getstrform(shared_datadir / "d6b286b8-virtualenv-py3.12-numpy.json"),
+        getstrform(shared_datadir / "d6b286b8-rattler-py3.12-numpy.json"),
+        shared_datadir / "d6b286b8_asv_samples_benchmarks.json",
+        only_improved=True,
+    )
+    assert result.strip()
+    # Should not contain any "+" (worsened) markers
+    for line in result.splitlines():
+        if line.startswith("|"):
+            assert "| + " not in line
+
+
+def test_do_compare_only_regressed(shared_datadir):
+    """--only-regressed filters to red results only."""
+    result, _, _ = do_compare(
+        getstrform(shared_datadir / "d6b286b8-virtualenv-py3.12-numpy.json"),
+        getstrform(shared_datadir / "d6b286b8-rattler-py3.12-numpy.json"),
+        shared_datadir / "d6b286b8_asv_samples_benchmarks.json",
+        only_regressed=True,
+    )
+    assert result.strip()
+    # Should not contain any "-" (improved) markers
+    for line in result.splitlines():
+        if line.startswith("|"):
+            assert "| - " not in line
+
+
 def test_result_df(shared_datadir):
     res = results.Results.load(
         getstrform(shared_datadir / "d6b286b8-rattler-py3.12-numpy.json")

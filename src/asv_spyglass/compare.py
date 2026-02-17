@@ -101,6 +101,8 @@ def do_compare(
     label_before=None,
     label_after=None,
     no_env_label=False,
+    only_improved=False,
+    only_regressed=False,
 ):
     # Load results
     res_1 = results.Results.load(b1)
@@ -236,6 +238,12 @@ def do_compare(
                 ratio = "~" + ratio.strip()
 
         if only_changed and mark in (" ", "x"):
+            continue
+
+        if only_improved and color != "green":
+            continue
+
+        if only_regressed and color != "red":
             continue
 
         unit = units[benchmark]
