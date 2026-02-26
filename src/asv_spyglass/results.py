@@ -52,7 +52,7 @@ class PreparedResult:
     versions: dict
     machine_name: str
     env_name: str
-    param_names: list
+    param_names: dict
 
     def __iter__(self):
         for field in dataclasses.fields(self):
@@ -101,14 +101,16 @@ class PreparedResult:
                 "samples": samples,
             }
             # Combine param and parameter name for column names
-            row.update(
-                dict(
-                    zip(
-                        [f"param_{name}" for name in self.param_names[key]],
-                        params,
+            pnames = self.param_names.get(key)
+            if pnames:
+                row.update(
+                    dict(
+                        zip(
+                            [f"param_{name}" for name in pnames],
+                            params,
+                        )
                     )
                 )
-            )
             data.append(row)
 
         return pl.DataFrame(data)

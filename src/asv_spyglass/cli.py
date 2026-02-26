@@ -14,6 +14,16 @@ rich_click.rich_click.SHOW_ARGUMENTS = True
 rich_click.rich_click.GROUP_ARGUMENTS_OPTIONS = True
 
 
+def _resolve_bconf(result_path: str, bconf: str | None) -> str | None:
+    """Auto-search for benchmarks.json when not explicitly provided."""
+    if bconf:
+        return bconf
+    bconf_path = Path(result_path).parent.parent / "benchmarks.json"
+    if bconf_path.exists():
+        return str(bconf_path)
+    return None
+
+
 @click.group(cls=rich_click.RichGroup)
 def cli():
     """ASV benchmark analysis tool."""
@@ -86,22 +96,18 @@ def compare(
     only_improved,
     only_regressed,
 ):
-    """Compare two ASV result files."""
+    """Compare two ASV result files.
+
+    B1 and B2 are paths to ASV result JSON files.
+    BCONF is an optional path to the benchmarks.json metadata file.
+    If BCONF is not provided, it is searched for in the parent directory of B1.
+    If still not found, comparisons proceed without extra metadata (units, etc).
+    """
     if only_improved and only_regressed:
         raise click.UsageError(
             "--only-improved and --only-regressed are mutually exclusive."
         )
-    if not bconf:
-        bconf_path = Path(b1).parent.parent / "benchmarks.json"
-        if bconf_path.exists():
-            bconf = str(bconf_path)
-        else:
-            raise click.UsageError(
-                "Error: Missing argument 'BCONF'. "
-                "Could not find 'benchmarks.json' "
-                "automatically. Please provide the "
-                "path to your benchmarks.json file."
-            )
+    bconf = _resolve_bconf(b1, bconf)
 
     output, worsened, _ = do_compare(
         b1,
@@ -124,16 +130,24 @@ def compare(
 
 @cli.command(cls=rich_click.RichCommand)
 @click.argument("bres", type=click.Path(exists=True), required=True)
-@click.argument("bdat", type=click.Path(exists=True), required=True)
+@click.argument("bdat", type=click.Path(exists=True), required=False)
 @click.option(
     "--csv",
     type=click.Path(),
     help="Save data to csv",
 )
 def to_df(bres, bdat, csv):
-    """Generate a dataframe from an ASV result file."""
+    """Generate a dataframe from an ASV result file.
+
+    BRES is the path to an ASV result JSON file.
+    BDAT is an optional path to the benchmarks.json metadata file.
+    If BDAT is not provided, it is searched for in the parent directory of BRES.
+    If still not found, results are displayed without extra metadata (units, etc).
+    """
     res = results.Results.load(bres)
-    benchdat = ReadOnlyASVBenchmarks(Path(bdat)).benchmarks
+    bdat = _resolve_bconf(bres, bdat)
+    bdat_path = Path(bdat) if bdat else None
+    benchdat = ReadOnlyASVBenchmarks(bdat_path).benchmarks
     preparer = ResultPreparer(benchdat)
     df = preparer.prepare(res).to_df()
     if csv:
@@ -146,3 +160,7 @@ def to_df(bres, bdat, csv):
             tbl_cols=50,
         ):
             click.echo(df)
+
+
+if __name__ == "__main__":
+    cli()

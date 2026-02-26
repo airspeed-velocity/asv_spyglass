@@ -18,6 +18,15 @@ from asv_spyglass.changes import get_change_info
 from asv_spyglass.results import ASVBench, PreparedResult, result_iter
 
 
+def human_value_fallback(value, unit, err=None):
+    """Fallback for human_value when units are missing."""
+    if unit:
+        return human_value(value, unit, err=err)
+    if err:
+        return f"{value:.3g}±{err:.1g}"
+    return f"{value:.3g}"
+
+
 class ResultPreparer:
     """Prepares benchmark results for comparison."""
 
@@ -49,11 +58,15 @@ class ResultPreparer:
                 result_vals[name] = value
                 ss[name] = (stats, samples)
                 versions[name] = version
-                bench_key = [x for x in self.benchmarks.keys() if key in x][0]
+                bench_keys = [x for x in self.benchmarks.keys() if key in x]
+                bench_key = bench_keys[0] if bench_keys else key
                 units[name] = self.benchmarks.get(bench_key, {}).get("unit")
                 param_names[name] = self.benchmarks.get(bench_key, {}).get(
                     "param_names"
                 )
+
+        if machine_env_name is None:
+            raise ValueError("No benchmark results found in the result file")
 
         machine, env_name = machine_env_name.split("/")
         return PreparedResult(
@@ -70,7 +83,7 @@ class ResultPreparer:
 def do_compare(
     result_before: str,
     result_after: str,
-    benchmarks_path: str | Path,
+    benchmarks_path: str | Path | None,
     factor: float = 1.1,
     split: bool = False,
     only_changed: bool = False,
@@ -90,7 +103,10 @@ def do_compare(
     res_1 = results.Results.load(result_before)
     res_2 = results.Results.load(result_after)
 
-    benchmarks = ReadOnlyASVBenchmarks(Path(benchmarks_path)).benchmarks
+    if benchmarks_path is not None:
+        benchmarks_path = Path(benchmarks_path)
+
+    benchmarks = ReadOnlyASVBenchmarks(benchmarks_path).benchmarks
 
     preparer = ResultPreparer(benchmarks)
     prepared_1 = preparer.prepare(res_1)
@@ -151,8 +167,8 @@ def do_compare(
         unit = asv1.unit or asv2.unit
 
         details = (
-            f"{mark:1s} {human_value(asv1.time, unit, err=asv1.err):>15s}"
-            f"  {human_value(asv2.time, unit, err=asv2.err):>15s}"
+            f"{mark:1s} {human_value_fallback(asv1.time, unit, err=asv1.err):>15s}"
+            f"  {human_value_fallback(asv2.time, unit, err=asv2.err):>15s}"
             f" {ratio_str:>8s}  "
         )
         split_line = details.split()

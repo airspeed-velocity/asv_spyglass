@@ -9,40 +9,45 @@ extension.
 
 ### Comparing two benchmark results
 
-This is agnostic to the environment, however the `benchmarks.json` is required.
-The practical usage of this command is to compare `asv` runs from builds which
-are not handled by the `asv` environment management machinery.
+Comparing two `asv` result JSON files is now as simple as:
 
 ``` sh
-➜ asv-spyglass compare tests/data/d6b286b8-virtualenv-py3.12-numpy.json tests/data/d6b286b8-rattler-py3.12-numpy.json tests/data/d6b286b8_asv_samples_benchmarks.json
+➜ asv-spyglass compare tests/data/d6b286b8-virtualenv-py3.12-numpy.json tests/data/d6b286b8-rattler-py3.12-numpy.json
 
+| Change   | Before         | After          |   Ratio | Benchmark (Parameter)                                                                                                               |
+|----------|----------------|----------------|---------|-------------------------------------------------------------------------------------------------------------------------------------|
+| -        | 1.57e-07±3e-09 | 1.37e-07±3e-09 |    0.87 | benchmarks.TimeSuiteDecoratorSingle.time_keys(10) [rgx1gen11/virtualenv-py3.12-numpy -> rgx1gen11/rattler-py3.12-numpy]             |
+| ...      | ...            | ...            |     ... | ...                                                                                                                                 |
+```
+
+> [!NOTE]
+> Without a `benchmarks.json` file, `asv-spyglass` does not know the units (e.g., nanoseconds) or parameter names, and thus displays the raw values from the JSON files in a concise scientific notation.
+
+If you provide the `benchmarks.json` file, the output is enhanced with
+human-readable units and statistical significance checks:
+
+``` sh
+➜ asv-spyglass compare \
+    tests/data/d6b286b8-virtualenv-py3.12-numpy.json \
+    tests/data/d6b286b8-rattler-py3.12-numpy.json \
+    tests/data/d6b286b8_asv_samples_benchmarks.json
 
 | Change   | Before      | After       |   Ratio | Benchmark (Parameter)                                                                                                               |
 |----------|-------------|-------------|---------|-------------------------------------------------------------------------------------------------------------------------------------|
 | -        | 157±3ns     | 137±3ns     |    0.87 | benchmarks.TimeSuiteDecoratorSingle.time_keys(10) [rgx1gen11/virtualenv-py3.12-numpy -> rgx1gen11/rattler-py3.12-numpy]             |
-| -        | 643±2ns     | 543±2ns     |    0.84 | benchmarks.TimeSuiteDecoratorSingle.time_keys(100) [rgx1gen11/virtualenv-py3.12-numpy -> rgx1gen11/rattler-py3.12-numpy]            |
-|          | 1.17±0μs    | 1.07±0μs    |    0.91 | benchmarks.TimeSuiteDecoratorSingle.time_keys(200) [rgx1gen11/virtualenv-py3.12-numpy -> rgx1gen11/rattler-py3.12-numpy]            |
-| +        | 167±3ns     | 187±3ns     |    1.12 | benchmarks.TimeSuiteDecoratorSingle.time_values(10) [rgx1gen11/virtualenv-py3.12-numpy -> rgx1gen11/rattler-py3.12-numpy]           |
-| +        | 685±4ns     | 785±4ns     |    1.15 | benchmarks.TimeSuiteDecoratorSingle.time_values(100) [rgx1gen11/virtualenv-py3.12-numpy -> rgx1gen11/rattler-py3.12-numpy]          |
-| +        | 1.26±0μs    | 1.46±0μs    |    1.16 | benchmarks.TimeSuiteDecoratorSingle.time_values(200) [rgx1gen11/virtualenv-py3.12-numpy -> rgx1gen11/rattler-py3.12-numpy]          |
-| +        | 1.17±0.01μs | 1.37±0.01μs |    1.17 | benchmarks.TimeSuiteMultiDecorator.time_ranges(10, 'arange') [rgx1gen11/virtualenv-py3.12-numpy -> rgx1gen11/rattler-py3.12-numpy]  |
-|          | 211±0.9ns   | 231±0.9ns   |    1.09 | benchmarks.TimeSuiteMultiDecorator.time_ranges(10, 'range') [rgx1gen11/virtualenv-py3.12-numpy -> rgx1gen11/rattler-py3.12-numpy]   |
-| +        | 3.43±0.02μs | 3.83±0.02μs |    1.12 | benchmarks.TimeSuiteMultiDecorator.time_ranges(100, 'arange') [rgx1gen11/virtualenv-py3.12-numpy -> rgx1gen11/rattler-py3.12-numpy] |
-| +        | 551±1ns     | 651±1ns     |    1.18 | benchmarks.TimeSuiteMultiDecorator.time_ranges(100, 'range') [rgx1gen11/virtualenv-py3.12-numpy -> rgx1gen11/rattler-py3.12-numpy]  |
-|          | 1.14±0μs    | 1.04±0μs    |    0.91 | benchmarks.time_ranges_multi(10, 'arange') [rgx1gen11/virtualenv-py3.12-numpy -> rgx1gen11/rattler-py3.12-numpy]                    |
-| -        | 196±1ns     | 176±1ns     |    0.9  | benchmarks.time_ranges_multi(10, 'range') [rgx1gen11/virtualenv-py3.12-numpy -> rgx1gen11/rattler-py3.12-numpy]                     |
-|          | 3.39±0.03μs | 3.09±0.03μs |    0.91 | benchmarks.time_ranges_multi(100, 'arange') [rgx1gen11/virtualenv-py3.12-numpy -> rgx1gen11/rattler-py3.12-numpy]                   |
-| -        | 532±1ns     | 432±1ns     |    0.81 | benchmarks.time_ranges_multi(100, 'range') [rgx1gen11/virtualenv-py3.12-numpy -> rgx1gen11/rattler-py3.12-numpy]                    |
-|          | 1.18±0μs    | 1.08±0μs    |    0.91 | benchmarks.time_sort(10) [rgx1gen11/virtualenv-py3.12-numpy -> rgx1gen11/rattler-py3.12-numpy]                                      |
-| -        | 1.83±0.01μs | 1.63±0.01μs |    0.89 | benchmarks.time_sort(100) [rgx1gen11/virtualenv-py3.12-numpy -> rgx1gen11/rattler-py3.12-numpy]                                     |
+| ...      | ...         | ...         |     ... | ...                                                                                                                                 |
 ```
 
 ### Consuming a single result file
 
 Can be useful for exporting to other dashboards, or internally for further
-inspection.
+inspection. The benchmark metadata file (`BDAT`) is optional — if omitted,
+`asv-spyglass` auto-searches for `benchmarks.json` in the parent directory
+of the result file (the standard `.asv/results/` layout). If still not
+found, results are displayed without extra metadata (units, parameter names).
 
 ``` sh
+# With explicit benchmarks.json
 ➜ asv-spyglass to-df tests/data/d6b286b8-rattler-py3.12-numpy.json tests/data/d6b286b8_asv_samples_benchmarks.json
 shape: (16, 17)
 | benchmark_base                 | name                           | result    | units   | machine   | env                  | version                       | ci_99_a   | ci_99_b   | q_25      | q_75      | number | repeat | samples | param_size | param_n | param_func_name |
@@ -69,6 +74,33 @@ shape: (16, 17)
 | benchmarks.time_sort           | benchmarks.time_sort(100)      | 0.000002  | seconds | rgx1gen11 | rattler-py3.12-numpy | 60785bf757da0254d857b696482db | 0.000002  | 0.000002  | 0.000002  | 0.000002  | 5828   | 10     | null    | null       | 100     | null            |
 |                                |                                |           |         |           |                      | 7a25509a5b28a2c9d2a54...      |           |           |           |           |        |        |         |            |         |                 |
 ```
+
+Without `benchmarks.json`, units and parameter name columns are absent:
+
+``` sh
+# Without benchmarks.json (auto-search finds nothing)
+➜ asv-spyglass to-df tests/data/d6b286b8-rattler-py3.12-numpy.json
+shape: (16, 14)
+| benchmark_base                 | name                           | result    | units | machine   | env                  | version                       | ci_99_a   | ci_99_b   | q_25      | q_75      | number | repeat | samples |
+|--------------------------------|--------------------------------|-----------|-------|-----------|----------------------|-------------------------------|-----------|-----------|-----------|-----------|--------|--------|---------|
+| benchmarks.TimeSuiteDecoratorS | benchmarks.TimeSuiteDecoratorS | 1.3738e-7 | null  | rgx1gen11 | rattler-py3.12-numpy | 64746c9051ff76aa879b428c27b42 | 1.3444e-7 | 1.4947e-7 | 1.3621e-7 | 1.4310e-7 | 67364  | 10     | null    |
+| ingle.time_keys                | ingle.time_keys(10)            |           |       |           |                      | 47e8ed976c44a40579ae9...      |           |           |           |           |        |        |         |
+| ...                            | ...                            | ...       | ...   | ...       | ...                  | ...                           | ...       | ...       | ...       | ...       | ...    | ...    | ...     |
+```
+
+
+## Metadata Handling
+
+While `asv-spyglass` can function with only result JSON files, providing the
+`benchmarks.json` file (the `BCONF` or `BDAT` argument) enables:
+
+- **Human-readable units**: Without it, values are shown as raw numbers.
+- **Parameter names**: Enables better column labeling in DataFrames.
+- **Statistical significance**: Uses benchmark-specific thresholds if defined.
+
+If not explicitly provided, `asv-spyglass` will attempt to find
+`benchmarks.json` by looking in the parent directory of the first result file,
+which is the standard layout for `.asv/results/<machine>/`.
 
 
 ## Advanced usage
@@ -191,10 +223,10 @@ To see only improvements or only regressions:
 
 ``` sh
 # Show only benchmarks that improved
-asv-spyglass compare --only-improved B1 B2 BCONF
+asv-spyglass compare --only-improved B1 B2 [BCONF]
 
 # Show only benchmarks that regressed
-asv-spyglass compare --only-regressed B1 B2 BCONF
+asv-spyglass compare --only-regressed B1 B2 [BCONF]
 ```
 
 These two flags are mutually exclusive. The compare command exits with
