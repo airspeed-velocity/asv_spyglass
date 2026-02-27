@@ -238,3 +238,93 @@ def do_compare(
         sections.append(table)
 
     return "\n\n".join(sections), worsened, improved
+
+
+def do_compare_many(
+    baseline_result: str,
+    contender_results: list[str],
+    benchmarks_path: str | Path | None,
+    factor: float = 1.1,
+    sort: str = "default",
+    use_stats: bool = True,
+    labels: list[str] | None = None,
+) -> str:
+    """Compare multiple ASV result files against a baseline."""
+    res_base = results.Results.load(baseline_result)
+    res_contenders = [results.Results.load(r) for r in contender_results]
+
+    if benchmarks_path is not None:
+        benchmarks_path = Path(benchmarks_path)
+
+    benchmarks_meta = ReadOnlyASVBenchmarks(benchmarks_path).benchmarks
+    preparer = ResultPreparer(benchmarks_meta)
+
+    prepared_base = preparer.prepare(res_base)
+    prepared_contenders = [preparer.prepare(r) for r in res_contenders]
+
+    mname_base = f"{prepared_base.machine_name}/{prepared_base.env_name}"
+    mnames_contenders = [f"{p.machine_name}/{p.env_name}" for p in prepared_contenders]
+
+    if labels:
+        display_names = labels
+    else:
+        display_names = [mname_base] + mnames_contenders
+
+    all_bench_keys = set(prepared_base.results.keys())
+    for p in prepared_contenders:
+        all_bench_keys |= set(p.results.keys())
+    joint_benchmarks = sorted(all_bench_keys)
+
+    table_data = []
+    unit_base = None
+
+    for benchmark in joint_benchmarks:
+        asv_base = ASVBench.from_prepared_result(benchmark, prepared_base)
+        row = [benchmark]
+
+        # Baseline value
+        unit = asv_base.unit
+        row.append(human_value_fallback(asv_base.time, unit, err=asv_base.err))
+
+        for p_cont in prepared_contenders:
+            asv_cont = ASVBench.from_prepared_result(benchmark, p_cont)
+            ratio = Ratio(t1=asv_base.time, t2=asv_cont.time)
+
+            info = get_change_info(asv_base, asv_cont, factor, use_stats)
+            mark = info.mark.value
+
+            if ratio.is_na:
+                ratio_str = "n/a"
+            else:
+                # Mark statistically insignificant results
+                if info.after_is.value == "same":
+                    if _is_result_better(
+                        asv_base.time, asv_cont.time, None, None, factor
+                    ) or _is_result_better(
+                        asv_cont.time, asv_base.time, None, None, factor
+                    ):
+                        ratio = Ratio(
+                            t1=asv_base.time,
+                            t2=asv_cont.time,
+                            is_insignificant=True,
+                        )
+                ratio_str = (
+                    repr(ratio) if ratio.is_insignificant else f"{ratio.val:6.2f}"
+                )
+
+            val_str = human_value_fallback(
+                asv_cont.time, asv_cont.unit or unit, err=asv_cont.err
+            )
+            row.append(f"{val_str} ({mark}{ratio_str})")
+
+        table_data.append(row)
+
+    if sort == "name":
+        table_data.sort(key=lambda v: v[0])
+    # Default sort is by benchmark name here as well for now
+
+    headers = ["Benchmark", f"Baseline ({display_names[0]})"]
+    for name in display_names[1:]:
+        headers.append(f"{name} (Ratio)")
+
+    return tabulate.tabulate(table_data, headers=headers, tablefmt="github")

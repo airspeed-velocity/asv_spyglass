@@ -7,7 +7,7 @@ import rich_click
 from asv import results
 
 from asv_spyglass._asv_ro import ReadOnlyASVBenchmarks
-from asv_spyglass.compare import ResultPreparer, do_compare
+from asv_spyglass.compare import ResultPreparer, do_compare, do_compare_many
 
 rich_click.rich_click.USE_RICH_MARKUP = True
 rich_click.rich_click.SHOW_ARGUMENTS = True
@@ -126,6 +126,60 @@ def compare(
     print(output)
     if worsened:
         sys.exit(1)
+
+
+@cli.command(cls=rich_click.RichCommand)
+@click.argument("baseline", type=click.Path(exists=True), required=True)
+@click.argument("contenders", type=click.Path(exists=True), required=True, nargs=-1)
+@click.option(
+    "--bconf",
+    type=click.Path(exists=True),
+    required=False,
+    help="Path to benchmarks.json",
+)
+@click.option(
+    "--factor",
+    default=1.1,
+    show_default=True,
+    help="Factor for determining significant changes.",
+)
+@click.option(
+    "--sort",
+    type=click.Choice(["default", "name"]),
+    default="default",
+    show_default=True,
+    help="Sort output by default or name.",
+)
+@click.option(
+    "--label",
+    "-l",
+    multiple=True,
+    help="Custom labels for the environments (baseline first).",
+)
+def compare_many(baseline, contenders, bconf, factor, sort, label):
+    """Compare multiple ASV result files against a baseline.
+
+    BASELINE is the result JSON file to compare against.
+    CONTENDERS are one or more result JSON files to compare.
+    """
+    if not bconf:
+        bconf_path = Path(baseline).parent.parent / "benchmarks.json"
+        if bconf_path.exists():
+            bconf = str(bconf_path)
+        else:
+            bconf = None
+
+    labels = list(label) if label else None
+
+    output = do_compare_many(
+        baseline,
+        list(contenders),
+        bconf,
+        factor=factor,
+        sort=sort,
+        labels=labels,
+    )
+    print(output)
 
 
 @cli.command(cls=rich_click.RichCommand)

@@ -11,6 +11,7 @@ from asv_spyglass.cli import cli
 from asv_spyglass.compare import (
     ResultPreparer,
     do_compare,
+    do_compare_many,
     result_iter,
 )
 
@@ -161,3 +162,32 @@ def test_to_df_auto_search(shared_datadir, tmp_path):
     # 17 columns = benchmarks.json was auto-discovered (without it: 12)
     assert "shape: (16, 17)" in result.output
     assert "sec" in result.output  # units from benchmarks.json
+
+
+def test_do_compare_many(shared_datadir):
+    """compare-many works with multiple result files (GH-3)."""
+    output = do_compare_many(
+        getstrform(shared_datadir / "a0f29428-conda-py3.11-numpy.json"),
+        [
+            getstrform(shared_datadir / "a0f29428-conda-py3.11.json"),
+            getstrform(shared_datadir / "a0f29428-virtualenv-py3.12-numpy.json"),
+        ],
+        shared_datadir / "asv_samples_a0f29428_benchmarks.json",
+    )
+    assert "Baseline" in output
+    assert "Ratio" in output
+    assert "benchmarks.TimeSuite.time_add_arr" in output
+
+
+def test_do_compare_many_no_bconf(shared_datadir):
+    """compare-many works without benchmarks.json (GH-3)."""
+    output = do_compare_many(
+        getstrform(shared_datadir / "a0f29428-conda-py3.11-numpy.json"),
+        [
+            getstrform(shared_datadir / "a0f29428-conda-py3.11.json"),
+        ],
+        benchmarks_path=None,
+    )
+    assert "benchmarks.TimeSuite.time_add_arr" in output
+    # Check for formatted float without units
+    assert "3.4e-05" in output
