@@ -9,7 +9,7 @@ extension.
 
 ### Comparing two benchmark results
 
-Comparing two `asv` result JSON files is now as simple as:
+To compare two `asv` result JSON files, do:
 
 ``` sh
 ➜ asv-spyglass compare tests/data/d6b286b8-virtualenv-py3.12-numpy.json tests/data/d6b286b8-rattler-py3.12-numpy.json
