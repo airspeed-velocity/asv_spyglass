@@ -21,7 +21,7 @@ To compare two `asv` result JSON files, do:
 ```
 
 > [!NOTE]
-> Without a `benchmarks.json` file, `asv-spyglass` does not know the units (e.g., nanoseconds) or parameter names, and thus displays the raw values from the JSON files in a concise scientific notation.
+> Without a `benchmarks.json` file, `asv-spyglass` does not know the units (e.g., nanoseconds) and thus displays raw values in concise scientific notation. Parameters remain visible as `benchmark(param, ...)` in the output.
 
 If you provide the `benchmarks.json` file, the output is enhanced with
 human-readable units and statistical significance checks:
@@ -61,7 +61,8 @@ Can be useful for exporting to other dashboards, or internally for further
 inspection. The benchmark metadata file (`BDAT`) is optional — if omitted,
 `asv-spyglass` auto-searches for `benchmarks.json` in the parent directory
 of the result file (the standard `.asv/results/` layout). If still not
-found, results are displayed without extra metadata (units, parameter names).
+found, results are displayed without extra metadata (units, named parameter
+columns).
 
 ``` sh
 # With explicit benchmarks.json
@@ -74,7 +75,9 @@ shape: (16, 17)
 | ...                            | ...                            | ...       | ...     | ...       | ...                  | ...                           | ...       | ...       | ...       | ...       | ...    | ...    | ...     | ...        | ...     | ...             |
 ```
 
-Without `benchmarks.json`, units and parameter name columns are absent:
+Without `benchmarks.json`, units are null and named parameter columns
+(e.g. `param_size`) are absent — though parameters remain visible in the
+`name` column as `benchmark(param1, ...)`:
 
 ``` sh
 # Without benchmarks.json (auto-search finds nothing)
@@ -94,7 +97,7 @@ While `asv-spyglass` can function with only result JSON files, providing the
 `benchmarks.json` file (the `BCONF` or `BDAT` argument) enables:
 
 - **Human-readable units**: Without it, values are shown as raw numbers (concise scientific notation).
-- **Parameter names**: Enables better column labeling in DataFrames.
+- **Named parameter columns**: Extracts parameters into separate `param_*` columns in DataFrames.
 - **Statistical significance**: Uses benchmark-specific thresholds if defined.
 
 If not explicitly provided, `asv-spyglass` will attempt to find
@@ -119,13 +122,15 @@ python scripts/gen_asv_conf.py asv.conf.base.json
 ```
 
 Now assuming there are two environments which are present, and both have the
-project to be tested installed. For this we will use `micromamba`.
+project to be tested installed. For this we will use `pixi`.
 
 ``` sh
-micromamba create -p $(pwd)/.tmp_1 -c conda-forge "python==3.8" pip asv numpy
-$(pwd)/.tmp_1/bin/pip install .
-micromamba create -p $(pwd)/.tmp_2 -c conda-forge "python==3.12" pip asv numpy
-$(pwd)/.tmp_2/bin/pip install .
+pixi project environment add tmp_1 --solve-group tmp_1
+pixi project environment add tmp_2 --solve-group tmp_2
+pixi add --solve-group tmp_1 "python==3.11" pip asv numpy
+pixi add --solve-group tmp_2 "python==3.12" pip asv numpy
+pixi run -e tmp_1 pip install .
+pixi run -e tmp_2 pip install .
 ```
 
 Activating the environment is not necessary in this instance, but for more
@@ -133,14 +138,13 @@ complex workflows where the installation can be more convoluted, feel free to
 work within the environment. Now we can run `asv`.
 
 ``` sh
-➜ asv run -E existing:$(pwd)/.tmp_2/bin/python --record-samples --bench 'multi' --set-commit-hash "HEAD"
+➜ pixi run -e tmp_2 asv run -E existing:$(pixi info -e tmp_2 --json | jq -r '.environments_info[0].prefix')/bin/python \
+    --record-samples --bench 'multi' --set-commit-hash "HEAD"
 · Discovering benchmarks
 · Running 1 total benchmarks (1 commits * 1 environments * 1 benchmarks)
 [ 0.00%] · For asv_samples commit d6b286b8 <decorator-params>:
-[ 0.00%] ·· Building for existing-py_home_rgoswami_Git_Github_Quansight_asvWork_asv_samples_.tmp_2_bin_python
-[ 0.00%] ·· Benchmarking existing-py_home_rgoswami_Git_Github_Quansight_asvWork_asv_samples_.tmp_2_bin_python
-[50.00%] ··· Running (benchmarks.time_ranges_multi--).
-[100.00%] ··· benchmarks.time_ranges_multi                                                                                                                                                                         ok
+[ 0.00%] ·· Benchmarking existing-...
+[100.00%] ··· benchmarks.time_ranges_multi    ok
 [100.00%] ··· ===== =========== =============
               --            func_name
               ----- -------------------------
@@ -150,14 +154,13 @@ work within the environment. Now we can run `asv`.
                100   535±0.8ns   3.30±0.03μs
               ===== =========== =============
 
-➜ asv run -E existing:$(pwd)/.tmp_1/bin/python --record-samples --bench 'multi' --set-commit-hash "HEAD"
+➜ pixi run -e tmp_1 asv run -E existing:$(pixi info -e tmp_1 --json | jq -r '.environments_info[0].prefix')/bin/python \
+    --record-samples --bench 'multi' --set-commit-hash "HEAD"
 · Discovering benchmarks
 · Running 1 total benchmarks (1 commits * 1 environments * 1 benchmarks)
 [ 0.00%] · For asv_samples commit d6b286b8 <decorator-params>:
-[ 0.00%] ·· Building for existing-py_home_rgoswami_Git_Github_Quansight_asvWork_asv_samples_.tmp_1_bin_python
-[ 0.00%] ·· Benchmarking existing-py_home_rgoswami_Git_Github_Quansight_asvWork_asv_samples_.tmp_1_bin_python
-[50.00%] ··· Running (benchmarks.time_ranges_multi--).
-[100.00%] ··· benchmarks.time_ranges_multi                                                                                                                                                                         ok
+[ 0.00%] ·· Benchmarking existing-...
+[100.00%] ··· benchmarks.time_ranges_multi    ok
 [100.00%] ··· ===== ========= =============
               --           func_name
               ----- -----------------------
@@ -174,13 +177,17 @@ results file, and therefore are not going to be relevant here.
 With the results files in place, it is now trivial to compare the results across environments.
 
 ``` sh
-asv-spyglass compare .asv/results/rgx1gen11/*.tmp_1* .asv/results/rgx1gen11/*.tmp_2* .asv/results/benchmarks.json
-| Change   | Before      | After       |   Ratio | Benchmark (Parameter)                                                                                                                                                                                                                          |
-|----------|-------------|-------------|---------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-|          | 1.09±0μs    | 1.12±0μs    |    1.03 | benchmarks.time_ranges_multi(10, 'arange') [rgx1gen11/existing-py_home_asv_samples_.tmp_1_bin_python -> rgx1gen11/existing-py_home_asv_samples_.tmp_2_bin_python]  |
-| -        | 324±2ns     | 197±1ns     |    0.61 | benchmarks.time_ranges_multi(10, 'range') [rgx1gen11/existing-py_home_asv_samples_.tmp_1_bin_python -> rgx1gen11/existing-py_home_asv_samples_.tmp_2_bin_python]   |
-|          | 3.25±0.03μs | 3.30±0.03μs |    1.02 | benchmarks.time_ranges_multi(100, 'arange') [rgx1gen11/existing-py_home_asv_samples_.tmp_1_bin_python -> rgx1gen11/existing-py_home_asv_samples_.tmp_2_bin_python] |
-| -        | 729±4ns     | 535±0.8ns   |    0.73 | benchmarks.time_ranges_multi(100, 'range') [rgx1gen11/existing-py_home_asv_samples_.tmp_1_bin_python -> rgx1gen11/existing-py_home_asv_samples_.tmp_2_bin_python]  |
+➜ asv-spyglass compare --label-before py311 --label-after py312 \
+    .asv/results/machine1/*tmp_1* \
+    .asv/results/machine1/*tmp_2* \
+    .asv/results/benchmarks.json
+
+| Change   | Before      | After       |   Ratio | Benchmark (Parameter)                                 |
+|----------|-------------|-------------|---------|-------------------------------------------------------|
+|          | 1.09±0μs    | 1.12±0μs    |    1.03 | benchmarks.time_ranges_multi(10, 'arange') [py311 -> py312]  |
+| -        | 324±2ns     | 197±1ns     |    0.61 | benchmarks.time_ranges_multi(10, 'range') [py311 -> py312]   |
+|          | 3.25±0.03μs | 3.30±0.03μs |    1.02 | benchmarks.time_ranges_multi(100, 'arange') [py311 -> py312] |
+| -        | 729±4ns     | 535±0.8ns   |    0.73 | benchmarks.time_ranges_multi(100, 'range') [py311 -> py312]  |
 ```
 
 The `[machine/env -> machine/env]` suffix can get very wide with long
@@ -188,22 +195,22 @@ venv paths. Use `--label-before` / `--label-after` to replace it with
 short names, or `--no-env-label` to suppress it entirely:
 
 ``` sh
-➜ asv-spyglass compare --label-before py38 --label-after py312 \
-    .asv/results/rgx1gen11/*.tmp_1* \
-    .asv/results/rgx1gen11/*.tmp_2* \
+➜ asv-spyglass compare --label-before py311 --label-after py312 \
+    .asv/results/machine1/*tmp_1* \
+    .asv/results/machine1/*tmp_2* \
     .asv/results/benchmarks.json
 
-| Change   | Before      | After       |   Ratio | Benchmark (Parameter)                                                         |
-|----------|-------------|-------------|---------|-------------------------------------------------------------------------------|
-| -        | 157±3ns     | 137±3ns     |    0.87 | benchmarks.TimeSuiteDecoratorSingle.time_keys(10) [py38 -> py312]             |
-| -        | 643±2ns     | 543±2ns     |    0.84 | benchmarks.TimeSuiteDecoratorSingle.time_keys(100) [py38 -> py312]            |
-| ...      | ...         | ...         |     ... | ...                                                                           |
+| Change   | Before      | After       |   Ratio | Benchmark (Parameter)                                                          |
+|----------|-------------|-------------|---------|--------------------------------------------------------------------------------|
+| -        | 157±3ns     | 137±3ns     |    0.87 | benchmarks.TimeSuiteDecoratorSingle.time_keys(10) [py311 -> py312]             |
+| -        | 643±2ns     | 543±2ns     |    0.84 | benchmarks.TimeSuiteDecoratorSingle.time_keys(100) [py311 -> py312]            |
+| ...      | ...         | ...         |     ... | ...                                                                            |
 ```
 
 ``` sh
 ➜ asv-spyglass compare --no-env-label \
-    .asv/results/rgx1gen11/*.tmp_1* \
-    .asv/results/rgx1gen11/*.tmp_2* \
+    .asv/results/machine1/*tmp_1* \
+    .asv/results/machine1/*tmp_2* \
     .asv/results/benchmarks.json
 
 | Change   | Before      | After       |   Ratio | Benchmark (Parameter)                                         |

@@ -23,6 +23,12 @@ test = [
     "approvaltests>=14.3.0",
     "pytest-datadir>=1.5.0",
 ]
+doc = [
+    "sphinx>=7.0.0",
+    "pydata-sphinx-theme>=0.13.0",
+    "myst-parser>=1.0.0",
+    "sphinx-click>=4.4.0",
+]
 [build-system]
 requires = ["hatchling", "hatch-vcs"]
 build-backend = "hatchling.build"
